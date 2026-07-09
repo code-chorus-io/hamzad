@@ -33,12 +33,11 @@ func patchScript(fp profile.Fingerprint) string {
 	if fp.WebGLVendor != "" || fp.WebGLRenderer != "" {
 		parts = append(parts, webglPatch(fp.WebGLVendor, fp.WebGLRenderer))
 	}
+	if fp.ScreenWidth > 0 && fp.ScreenHeight > 0 {
+		parts = append(parts, screenPatch(fp.ScreenWidth, fp.ScreenHeight))
+	}
 	if fp.CanvasNoise {
 		parts = append(parts, canvasNoisePatch())
-	}
-
-	if len(parts) == 0 {
-		return ""
 	}
 
 	return "(() => {\n" + strings.Join(parts, "\n") + "\n})();"
@@ -82,6 +81,18 @@ func webglPatch(vendor, renderer string) string {
     if (window.WebGLRenderingContext) patch(WebGLRenderingContext.prototype);
     if (window.WebGL2RenderingContext) patch(WebGL2RenderingContext.prototype);
   } catch (e) {}`, string(v), string(r))
+}
+
+// screenPatch overrides the window.screen dimensions that CDP's
+// Emulation.setDeviceMetricsOverride leaves reporting the host monitor on a
+// desktop page, so screen.width/height match the profile's declared size. availWidth/availHeight mirror the full size since no host chrome is being emulated.
+func screenPatch(w, h int) string {
+	return fmt.Sprintf(`  try {
+    const dims = { width: %d, height: %d, availWidth: %d, availHeight: %d };
+    for (const [k, v] of Object.entries(dims)) {
+      try { Object.defineProperty(Object.getPrototypeOf(screen), k, { get: () => v, configurable: true }); } catch (e) {}
+    }
+  } catch (e) {}`, w, h, w, h)
 }
 
 // canvasNoisePatch perturbs canvas readback so per-profile canvas hashes differ
