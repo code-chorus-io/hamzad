@@ -270,6 +270,7 @@ func (c Crypt) askPassphrase(prompt string) ([]byte, error) {
 	}
 
 	fmt.Fprint(os.Stderr, prompt)
+	//nolint:gosec // os.Stdin.Fd() is 0 on all supported platforms; no overflow
 	pass, err := term.ReadPassword(int(os.Stdin.Fd()))
 	fmt.Fprintln(os.Stderr)
 	if err != nil {
