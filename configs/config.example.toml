@@ -1,0 +1,17 @@
+# koochooloologin configuration.
+#
+# Copy to the store directory or point at it with --config / KEL_CONFIG.
+# Every value can also be set via environment variables with the KEL_ prefix,
+# e.g. KEL_CHROME_PATH, KEL_STORE_DIR.
+
+# Path to the Chrome/Chromium executable. Leave empty to auto-detect from PATH.
+chrome_path = ""
+
+# Directory holding the profile store (a git repository). Defaults to
+# $XDG_CONFIG_HOME/koochooloologin (typically ~/.config/koochooloologin).
+store_dir = ""
+
+# age or SSH private key used to decrypt secrets and session bundles.
+# Encryption only needs the public recipients in the store; only decryption
+# (open, pull, show --reveal) uses this key. Defaults to ~/.ssh/id_ed25519.
+identity_path = ""

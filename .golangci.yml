@@ -1,0 +1,42 @@
+---
+version: "2"
+linters:
+  default: all
+  disable:
+    # Keep this list short. Each entry needs a one-line "why" comment.
+    - depguard       # noisy without a curated allowlist; revisit when one exists
+    - gomodguard     # same reasoning as depguard
+    - tagliatelle    # struct tags follow config/CDP naming, not Go style
+    - varnamelen     # short receiver / loop names are idiomatic Go
+    - wsl            # whitespace cop produces too much churn for too little signal
+    - wsl_v5         # ditto for the v5 rewrite
+    - exhaustruct    # zero-valued config/option structs are intentional here
+    - forbidigo      # this is a CLI; printing results to stdout via fmt is the point
+    - mnd            # timeouts and tabwriter/SplitN params read fine as literals
+    - gochecknoglobals # package-level lookup tables and cli command factories are intentional
+    - lll            # struct fields carry three encoding tags and legitimately exceed 120
+    - funcorder      # method declaration order is not meaningful in these small types
+    - noinlineerr    # `if err := f(); err != nil` is idiomatic Go and used throughout
+    - ireturn        # age's API is interface-based (age.Recipient / age.Identity)
+  settings:
+    revive:
+      rules:
+        - name: exported
+          arguments: ["checkPrivateReceivers", "disableStutteringCheck"]
+        - name: package-comments
+        - name: var-naming
+    wrapcheck:
+      # Our own internal packages already wrap their errors with context, so
+      # re-wrapping at the command layer would just double the prefix.
+      ignore-package-globs:
+        - github.com/1995parham/koochooloologin/*
+      ignore-sigs:
+        - .Errorf(
+        - errors.New(
+        - errors.Unwrap(
+        - errors.Join(
+        - .Wrap(
+        - .Wrapf(
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
