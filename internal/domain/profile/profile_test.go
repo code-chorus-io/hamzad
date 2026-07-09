@@ -18,7 +18,10 @@ func TestProfileValidate(t *testing.T) {
 		{"dashes and digits", profile.Profile{Name: "acct-01_x"}, false},
 		{"empty name", profile.Profile{Name: ""}, true},
 		{"space in name", profile.Profile{Name: "my profile"}, true},
-		{"good proxy", profile.Profile{Name: "p", Proxy: "socks5://user:pass@1.2.3.4:1080"}, false},
+		{"good socks proxy", profile.Profile{Name: "p", Proxy: "socks5://1.2.3.4:1080"}, false},
+		//nolint:gosec // fixture proxy URL, not a real credential
+		{"good authed http proxy", profile.Profile{Name: "p", Proxy: "http://user:pass@1.2.3.4:8080"}, false},
+		{"authed socks proxy", profile.Profile{Name: "p", Proxy: "socks5://user:pass@1.2.3.4:1080"}, true},
 		{"bad proxy scheme", profile.Profile{Name: "p", Proxy: "ftp://host:21"}, true},
 		{"proxy without host", profile.Profile{Name: "p", Proxy: "http://"}, true},
 		{"good timezone", profile.Profile{Name: "p", Timezone: "Europe/Berlin"}, false},

@@ -97,32 +97,50 @@ func screenPatch(w, h int) string {
 
 // canvasNoisePatch perturbs canvas readback so per-profile canvas hashes differ
 // from the host's, without visibly altering rendered output.
+//
+// The perturbation flips the low bit of each RGB channel by a fixed,
+// position-derived pattern, so it is deterministic: the same canvas always
+// hashes to the same (host-distinct) value, and the toDataURL and getImageData
+// paths agree with each other. Crucially, the noise is only ever applied to a
+// copy of the pixels being read out — the source canvas is never written back
+// to — so repeated reads stay stable and the visible canvas is never corrupted.
 func canvasNoisePatch() string {
 	return `  try {
-    const noisify = (canvas, ctx) => {
-      try {
-        const w = canvas.width, h = canvas.height;
-        if (!w || !h) return;
-        const img = ctx.getImageData(0, 0, w, h);
-        for (let i = 0; i < img.data.length; i += 4) {
-          img.data[i]   ^= (i * 13) & 1;
-          img.data[i+1] ^= (i * 7)  & 1;
-          img.data[i+2] ^= (i * 3)  & 1;
-        }
-        ctx.putImageData(img, 0, 0);
-      } catch (e) {}
+    // Flip the low bit of the R/G/B channels by a fixed per-position pattern.
+    const noise = (data) => {
+      for (let i = 0; i < data.length; i += 4) {
+        data[i]   ^= (i * 13) & 1;
+        data[i+1] ^= (i * 7)  & 1;
+        data[i+2] ^= (i * 3)  & 1;
+      }
     };
-    const toDataURL = HTMLCanvasElement.prototype.toDataURL;
-    HTMLCanvasElement.prototype.toDataURL = function () {
-      const ctx = this.getContext('2d');
-      if (ctx) noisify(this, ctx);
-      return toDataURL.apply(this, arguments);
-    };
-    const getImageData = CanvasRenderingContext2D.prototype.getImageData;
+    const rawGetImageData = CanvasRenderingContext2D.prototype.getImageData;
     CanvasRenderingContext2D.prototype.getImageData = function () {
-      const res = getImageData.apply(this, arguments);
-      for (let i = 0; i < res.data.length; i += 4) res.data[i] ^= (i * 5) & 1;
+      // getImageData already returns a fresh copy, so noising it in place does
+      // not touch the canvas itself.
+      const res = rawGetImageData.apply(this, arguments);
+      noise(res.data);
       return res;
+    };
+    const rawToDataURL = HTMLCanvasElement.prototype.toDataURL;
+    HTMLCanvasElement.prototype.toDataURL = function () {
+      const w = this.width, h = this.height;
+      const ctx = w && h ? this.getContext('2d') : null;
+      if (!ctx) return rawToDataURL.apply(this, arguments);
+      try {
+        // Serialize a detached copy with the noise baked in; the original
+        // canvas is left untouched, so successive calls return the same value.
+        const copy = document.createElement('canvas');
+        copy.width = w; copy.height = h;
+        const cctx = copy.getContext('2d');
+        cctx.drawImage(this, 0, 0);
+        const img = rawGetImageData.call(cctx, 0, 0, w, h);
+        noise(img.data);
+        cctx.putImageData(img, 0, 0);
+        return rawToDataURL.apply(copy, arguments);
+      } catch (e) {
+        return rawToDataURL.apply(this, arguments);
+      }
     };
   } catch (e) {}`
 }

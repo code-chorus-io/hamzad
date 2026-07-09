@@ -20,6 +20,13 @@ var ErrUnsupportedProxyScheme = errors.New("unsupported proxy scheme (want http,
 // ErrProxyMissingHost is returned when a proxy URL has no host:port.
 var ErrProxyMissingHost = errors.New("proxy is missing host:port")
 
+// ErrProxyAuthUnsupported is returned for a proxy that carries credentials on a
+// scheme Chrome cannot authenticate. Chromium has no support for authenticated
+// SOCKS proxies (neither via --proxy-server nor the CDP Fetch auth challenge,
+// which only fires for HTTP 407s), so such credentials would be silently
+// dropped and the connection would fail. Use an http/https proxy for user:pass.
+var ErrProxyAuthUnsupported = errors.New("proxy scheme cannot authenticate credentials (Chrome does not support authenticated SOCKS proxies; use http/https for user:pass)")
+
 // nameRE constrains profile names to a filesystem- and git-friendly shape so a
 // name can double as a directory component in the store.
 var nameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
@@ -111,6 +118,12 @@ func ParseProxy(raw string) (*url.URL, error) {
 
 	if u.Host == "" {
 		return nil, fmt.Errorf("%w: %q", ErrProxyMissingHost, raw)
+	}
+
+	// Chrome cannot authenticate SOCKS proxies; reject credentials up front
+	// rather than let them be dropped and the connection fail opaquely.
+	if u.User != nil && (u.Scheme == "socks4" || u.Scheme == "socks5") {
+		return nil, fmt.Errorf("%w: %q", ErrProxyAuthUnsupported, u.Scheme)
 	}
 
 	return u, nil
