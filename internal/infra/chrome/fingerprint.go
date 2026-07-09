@@ -16,7 +16,10 @@ import (
 // layer; this covers the gaps a plain Chromium leaves open. Returns "" when the
 // fingerprint requests none of these patches.
 func patchScript(fp profile.Fingerprint) string {
-	var parts []string
+	// Always neutralize the automation tell first: chromedp's CDP attach sets
+	// navigator.webdriver to true, which trips bot checks (e.g. Google's
+	// sign-in block). A real, non-automated Chrome reports false.
+	parts := []string{defineNavigator("webdriver", false)}
 
 	if fp.HardwareConcurrent > 0 {
 		parts = append(parts, defineNavigator("hardwareConcurrency", fp.HardwareConcurrent))

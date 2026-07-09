@@ -105,6 +105,11 @@ func execOptions(o Options, execPath string) []chromedp.ExecAllocatorOption {
 		chromedp.ExecPath(execPath),
 		chromedp.Flag("headless", false),
 		chromedp.UserDataDir(o.UserDataDir),
+		// Drop the "controlled by automated software" infobar chromedp sets by
+		// default. navigator.webdriver is neutralized in JS instead (see
+		// webdriverPatch) to avoid the "unsupported command-line flag" banner
+		// that --disable-blink-features would raise.
+		chromedp.Flag("enable-automation", false),
 	)
 	if ua := o.Fingerprint.UserAgent; ua != "" {
 		opts = append(opts, chromedp.UserAgent(ua))
