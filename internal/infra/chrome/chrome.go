@@ -110,6 +110,8 @@ func execOptions(o Options, execPath string) []chromedp.ExecAllocatorOption {
 		// webdriverPatch) to avoid the "unsupported command-line flag" banner
 		// that --disable-blink-features would raise.
 		chromedp.Flag("enable-automation", false),
+		// chromedp mutes audio by default; a real browsing session should play it.
+		chromedp.Flag("mute-audio", false),
 	)
 	if ua := o.Fingerprint.UserAgent; ua != "" {
 		opts = append(opts, chromedp.UserAgent(ua))
