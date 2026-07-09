@@ -335,19 +335,22 @@ func extractTar(tr *tar.Reader, dir string) error {
 			return err
 		}
 
-		if err := extractEntry(tr, header, target); err != nil {
+		if err := extractEntry(tr, header, dir, target); err != nil {
 			return err
 		}
 	}
 }
 
-func extractEntry(tr *tar.Reader, header *tar.Header, target string) error {
+func extractEntry(tr *tar.Reader, header *tar.Header, dir, target string) error {
 	switch header.Typeflag {
 	case tar.TypeDir:
 		if err := os.MkdirAll(target, 0o750); err != nil {
 			return fmt.Errorf("creating dir %q: %w", target, err)
 		}
 	case tar.TypeSymlink:
+		if err := checkSymlink(dir, target, header.Linkname); err != nil {
+			return err
+		}
 		if err := os.Symlink(header.Linkname, target); err != nil {
 			return fmt.Errorf("creating symlink %q: %w", target, err)
 		}
@@ -390,6 +393,24 @@ func safeJoin(dir, name string) (string, error) {
 	}
 
 	return clean, nil
+}
+
+// checkSymlink rejects a symlink whose target would resolve outside dir. A
+// relative link is resolved against the link's own parent directory; an
+// absolute link is rejected outright. This blocks the two-step traversal where
+// a symlink to an outside directory is followed by a file entry written through
+// it (safeJoin alone is lexical and cannot catch that).
+func checkSymlink(dir, target, linkname string) error {
+	if filepath.IsAbs(linkname) {
+		return fmt.Errorf("%w: symlink %q → %q", errBundleEscape, target, linkname)
+	}
+
+	resolved := filepath.Clean(filepath.Join(filepath.Dir(target), filepath.FromSlash(linkname)))
+	if resolved != dir && !strings.HasPrefix(resolved, dir+string(os.PathSeparator)) {
+		return fmt.Errorf("%w: symlink %q → %q", errBundleEscape, target, linkname)
+	}
+
+	return nil
 }
 
 func (s *Store) removeBundle(name string) error {

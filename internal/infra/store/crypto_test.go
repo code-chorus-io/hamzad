@@ -1,7 +1,9 @@
 package store_test
 
 import (
+	"archive/tar"
 	"bytes"
+	"compress/gzip"
 	"os"
 	"path/filepath"
 	"testing"
@@ -108,6 +110,62 @@ func TestBundleRoundTrip(t *testing.T) {
 	}
 	if got := readFile(t, filepath.Join(dir, "Default", "Preferences")); got != `{"k":"v"}` {
 		t.Fatalf("Preferences = %q", got)
+	}
+}
+
+// TestUnpackBundleRejectsEscapingSymlink ensures a malicious bundle cannot use
+// a symlink to write outside the profile's working directory (CWE-022).
+func TestUnpackBundleRejectsEscapingSymlink(t *testing.T) {
+	t.Parallel()
+
+	for _, linkname := range []string{"../../../escape", "/etc"} {
+		t.Run(linkname, func(t *testing.T) {
+			t.Parallel()
+
+			st, c := newCrypt(t)
+			writeSymlinkBundle(t, st, c, "work", linkname)
+
+			if err := st.UnpackBundle(c, "work"); err == nil {
+				t.Fatalf("UnpackBundle accepted an escaping symlink → %q", linkname)
+			}
+		})
+	}
+}
+
+// writeSymlinkBundle writes an encrypted bundle whose sole entry is a symlink
+// pointing at linkname, mimicking a hostile teammate's shared session.
+func writeSymlinkBundle(t *testing.T, st *store.Store, c crypt.Crypt, name, linkname string) {
+	t.Helper()
+
+	if err := os.MkdirAll(filepath.Dir(st.BundlePath(name)), 0o750); err != nil {
+		t.Fatalf("mkdir data dir: %v", err)
+	}
+	f, err := os.Create(st.BundlePath(name))
+	if err != nil {
+		t.Fatalf("create bundle: %v", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	enc, err := c.EncryptWriter(f)
+	if err != nil {
+		t.Fatalf("EncryptWriter: %v", err)
+	}
+	gz := gzip.NewWriter(enc)
+	tw := tar.NewWriter(gz)
+
+	if err := tw.WriteHeader(&tar.Header{
+		Name:     "evil",
+		Typeflag: tar.TypeSymlink,
+		Linkname: linkname,
+		Mode:     0o777,
+	}); err != nil {
+		t.Fatalf("write symlink header: %v", err)
+	}
+
+	for _, closer := range []func() error{tw.Close, gz.Close, enc.Close} {
+		if err := closer(); err != nil {
+			t.Fatalf("closing bundle writer: %v", err)
+		}
 	}
 }
 
