@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"sync"
 
 	"github.com/BurntSushi/toml"
 
@@ -32,8 +33,15 @@ const (
 )
 
 // Store is a handle to an on-disk profile store rooted at Dir.
+//
+// The profiles.toml mutations (Add, Put, Remove) are read-modify-write and are
+// serialized by mu so a long-running process (e.g. the TUI) can mutate the
+// store from several goroutines without losing updates. The one-shot CLI only
+// ever holds a single Store and never contends, so mu is uncontended there.
 type Store struct {
 	Dir string
+
+	mu sync.Mutex
 }
 
 // New returns a store rooted at dir. It does not touch the filesystem; call
@@ -110,6 +118,9 @@ func (s *Store) Add(p profile.Profile) error {
 		return err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	doc, err := s.load()
 	if err != nil {
 		return err
@@ -128,6 +139,9 @@ func (s *Store) Put(p profile.Profile) error {
 		return err
 	}
 
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	doc, err := s.load()
 	if err != nil {
 		return err
@@ -140,6 +154,9 @@ func (s *Store) Put(p profile.Profile) error {
 // Remove deletes the named profile and, when purgeData is set, its browsing
 // data directory. It returns ErrNotFound when the profile is absent.
 func (s *Store) Remove(name string, purgeData bool) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	doc, err := s.load()
 	if err != nil {
 		return err
