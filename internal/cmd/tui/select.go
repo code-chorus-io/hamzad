@@ -96,24 +96,38 @@ func newOSField() *selectField {
 	}
 }
 
-// newProcessorField builds the processor dropdown. Options set
-// navigator.hardwareConcurrency (the logical core count a site reads to profile
-// the CPU); the default leaves Chrome's own value untouched.
+// newProcessorField builds the processor dropdown. Each preset is a coherent
+// machine: it sets navigator.hardwareConcurrency (logical core count) together
+// with the WebGL UNMASKED_VENDOR/RENDERER strings Chrome reports for that GPU,
+// so the CPU and GPU signals agree. The renderer strings are real Chrome/ANGLE
+// values — Metal on Apple silicon, Direct3D11 on Windows — so pick a preset that
+// matches the operating-system dropdown for a fully consistent identity. The
+// default leaves Chrome's own values untouched.
 func newProcessorField() *selectField {
-	cores := func(n int) func(*domain.Fingerprint) {
-		return func(fp *domain.Fingerprint) { fp.HardwareConcurrent = n }
+	machine := func(cores int, vendor, renderer string) func(*domain.Fingerprint) {
+		return func(fp *domain.Fingerprint) {
+			fp.HardwareConcurrent = cores
+			fp.WebGLVendor = vendor
+			fp.WebGLRenderer = renderer
+		}
 	}
 
 	return &selectField{
 		name: "processor",
 		options: []selectOption{
 			{label: "default (host)", apply: func(*domain.Fingerprint) {}},
-			{label: "2 cores", apply: cores(2)},
-			{label: "4 cores", apply: cores(4)},
-			{label: "6 cores", apply: cores(6)},
-			{label: "8 cores", apply: cores(8)},
-			{label: "12 cores", apply: cores(12)},
-			{label: "16 cores", apply: cores(16)},
+			{label: "Apple M2 · 8-core", apply: machine(8, "Google Inc. (Apple)",
+				"ANGLE (Apple, ANGLE Metal Renderer: Apple M2, Unspecified Version)")},
+			{label: "Apple M1 · 8-core", apply: machine(8, "Google Inc. (Apple)",
+				"ANGLE (Apple, ANGLE Metal Renderer: Apple M1, Unspecified Version)")},
+			{label: "Intel i7 · UHD 630 · 8-core", apply: machine(8, "Google Inc. (Intel)",
+				"ANGLE (Intel, Intel(R) UHD Graphics 630 (0x00003E9B) Direct3D11 vs_5_0 ps_5_0, D3D11)")},
+			{label: "Intel i5 · Iris Xe · 8-core", apply: machine(8, "Google Inc. (Intel)",
+				"ANGLE (Intel, Intel(R) Iris(R) Xe Graphics (0x0000A7A0) Direct3D11 vs_5_0 ps_5_0, D3D11)")},
+			{label: "AMD Ryzen · Radeon · 12-core", apply: machine(12, "Google Inc. (AMD)",
+				"ANGLE (AMD, AMD Radeon(TM) Graphics Direct3D11 vs_5_0 ps_5_0, D3D11)")},
+			{label: "NVIDIA RTX 3060 · 12-core", apply: machine(12, "Google Inc. (NVIDIA)",
+				"ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 (0x00002503) Direct3D11 vs_5_0 ps_5_0, D3D11)")},
 		},
 	}
 }

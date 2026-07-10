@@ -156,12 +156,15 @@ func TestFormDropdownsSpoofFingerprint(t *testing.T) {
 	name.input.SetValue("winbox")
 
 	// Advance the OS dropdown one step (default → Windows) and the processor
-	// dropdown four steps (default → 2 → 4 → 6 → 8 cores). "l" cycles forward.
+	// dropdown to its first real machine. "l" cycles forward.
 	findSelect(t, m.form, "operating system").update(key("l"))
 	cpu := findSelect(t, m.form, "processor")
-	for range 4 {
-		cpu.update(key("l"))
-	}
+	cpu.update(key("l"))
+
+	// The persisted fingerprint must match exactly what the chosen processor
+	// preset applies, so the whole submit → store path is exercised.
+	var wantCPU domain.Fingerprint
+	cpu.selected().apply(&wantCPU)
 
 	next, _ = m.submitForm()
 	m = asModel(t, next)
@@ -180,7 +183,14 @@ func TestFormDropdownsSpoofFingerprint(t *testing.T) {
 	if !strings.Contains(p.Fingerprint.UserAgent, "Windows NT 10.0") {
 		t.Errorf("UserAgent = %q, want a Windows UA", p.Fingerprint.UserAgent)
 	}
-	if p.Fingerprint.HardwareConcurrent != 8 {
-		t.Errorf("HardwareConcurrent = %d, want 8", p.Fingerprint.HardwareConcurrent)
+	if p.Fingerprint.HardwareConcurrent != wantCPU.HardwareConcurrent {
+		t.Errorf("HardwareConcurrent = %d, want %d",
+			p.Fingerprint.HardwareConcurrent, wantCPU.HardwareConcurrent)
+	}
+	if p.Fingerprint.WebGLVendor != wantCPU.WebGLVendor {
+		t.Errorf("WebGLVendor = %q, want %q", p.Fingerprint.WebGLVendor, wantCPU.WebGLVendor)
+	}
+	if p.Fingerprint.WebGLRenderer != wantCPU.WebGLRenderer {
+		t.Errorf("WebGLRenderer = %q, want %q", p.Fingerprint.WebGLRenderer, wantCPU.WebGLRenderer)
 	}
 }
