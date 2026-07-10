@@ -11,6 +11,7 @@ import (
 
 	profilecmd "github.com/1995parham/koochooloologin/internal/cmd/profile"
 	storecmd "github.com/1995parham/koochooloologin/internal/cmd/store"
+	tuicmd "github.com/1995parham/koochooloologin/internal/cmd/tui"
 	"github.com/1995parham/koochooloologin/internal/infra/config"
 )
 
@@ -66,6 +67,7 @@ func Execute() {
 		Commands: []*cli.Command{
 			profilecmd.Command(),
 			storecmd.Command(),
+			tuicmd.Command(),
 		},
 	}
 
