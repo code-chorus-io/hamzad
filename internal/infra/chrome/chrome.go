@@ -9,7 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"net/url"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strconv"
 
@@ -76,6 +78,15 @@ func Launch(ctx context.Context, o Options) error {
 		return ErrNoBrowser
 	}
 
+	// chromedp force-kills Chrome (SIGKILL) when ctx is cancelled — which is how
+	// the TUI closes a session and how Ctrl-C ends the CLI — so Chrome never runs
+	// its own cleanup and leaves the ProcessSingleton lock files behind. On the
+	// next launch of the same profile Chrome would see them, assume another
+	// browser owns the user-data-dir, hand off, and exit ("Opening in existing
+	// browser session."). Only one browser ever owns a profile dir at a time, so
+	// any lock we find here is stale; clear it before launching.
+	clearSingletonLocks(o.UserDataDir)
+
 	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, execOptions(o, execPath)...)
 	defer cancelAlloc()
 
@@ -96,6 +107,24 @@ func Launch(ctx context.Context, o Options) error {
 	<-taskCtx.Done()
 
 	return nil
+}
+
+// clearSingletonLocks removes Chrome's ProcessSingleton files from a profile's
+// user-data-dir. They are symlinks (SingletonLock -> host-pid, plus the socket
+// and cookie); a browser that exits cleanly deletes them, but one killed with
+// SIGKILL cannot, orphaning them. It is a no-op for an empty dir (chromedp then
+// uses a fresh temp dir) or when the files are absent.
+func clearSingletonLocks(dir string) {
+	if dir == "" {
+		return
+	}
+
+	for _, name := range []string{"SingletonLock", "SingletonSocket", "SingletonCookie"} {
+		// Remove the symlink itself, not its target. A missing file is fine, and
+		// a lingering lock is not fatal (Chrome may still break it), so any error
+		// is deliberately ignored rather than aborting the launch.
+		_ = os.Remove(filepath.Join(dir, name))
+	}
 }
 
 // execOptions assembles the process-level launch flags for the browser.
