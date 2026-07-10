@@ -69,7 +69,10 @@ func (s *selectField) view() string {
 
 // newOSField builds the operating-system dropdown. Each non-default option sets
 // navigator.platform together with a matching Chrome user-agent so the spoofed
-// OS is coherent across both surfaces.
+// OS is coherent across both surfaces. The mobile presets (Android, iOS) only
+// override platform/UA — the launcher does not yet emulate touch input, a mobile
+// viewport, or the CDP mobile flag, so they read as mobile to UA/platform sniffs
+// but not to a fingerprinter that also inspects screen size or maxTouchPoints.
 func newOSField() *selectField {
 	ua := func(system string) string {
 		return "Mozilla/5.0 (" + system + ") AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" +
@@ -91,6 +94,17 @@ func newOSField() *selectField {
 			{label: "Linux", apply: func(fp *domain.Fingerprint) {
 				fp.Platform = "Linux x86_64"
 				fp.UserAgent = ua("X11; Linux x86_64")
+			}},
+			{label: "Android (Pixel)", apply: func(fp *domain.Fingerprint) {
+				fp.Platform = "Linux armv8l"
+				fp.UserAgent = "Mozilla/5.0 (Linux; Android 14; Pixel 8) " +
+					"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/" +
+					chromeVersion + ".0.0.0 Mobile Safari/537.36"
+			}},
+			{label: "iOS (iPhone)", apply: func(fp *domain.Fingerprint) {
+				fp.Platform = "iPhone"
+				fp.UserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) " +
+					"AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1"
 			}},
 		},
 	}
