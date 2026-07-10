@@ -211,12 +211,7 @@ func buildActions(o Options) []chromedp.Action {
 		}))
 	}
 
-	start := o.StartURL
-	if start == "" {
-		start = "about:blank"
-	}
-
-	return append(acts, chromedp.Navigate(start))
+	return append(acts, chromedp.Navigate(startURL(o)))
 }
 
 // identityActions applies the who-am-I overrides: user-agent, its UA-CH
@@ -259,7 +254,7 @@ func environmentActions(o Options) []chromedp.Action {
 		// Grant the permission first so getCurrentPosition resolves instead of
 		// prompting, then install the coordinate override.
 		acts = append(acts,
-			browser.SetPermission(&browser.PermissionDescriptor{Name: "geolocation"}, browser.PermissionSettingGranted),
+			browser.SetPermission(&browser.PermissionDescriptor{Name: geolocationKey}, browser.PermissionSettingGranted),
 			emulation.SetGeolocationOverride().
 				WithLatitude(g.Latitude).
 				WithLongitude(g.Longitude).
