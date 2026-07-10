@@ -87,8 +87,12 @@ func TestSwitchToFormAndSubmitPersistsProfile(t *testing.T) {
 		}
 	}
 
-	// Type a name and submit.
-	m.form.inputs[0].SetValue("gamma")
+	// Type a name and submit. The name is the first row (a text field).
+	nameField, ok := m.form.fields[0].(*textField)
+	if !ok {
+		t.Fatalf("expected first field to be a text field, got %T", m.form.fields[0])
+	}
+	nameField.input.SetValue("gamma")
 	next, _ = m.submitForm()
 	m = asModel(t, next)
 
@@ -120,5 +124,63 @@ func TestSubmitFormRequiresName(t *testing.T) {
 	}
 	if profiles, _ := st.List(); len(profiles) != 2 {
 		t.Errorf("expected no new profile, store has %d", len(profiles))
+	}
+}
+
+// findSelect returns the dropdown row with the given label, failing if absent.
+func findSelect(t *testing.T, f formModel, label string) *selectField {
+	t.Helper()
+
+	for _, fl := range f.fields {
+		if s, ok := fl.(*selectField); ok && s.name == label {
+			return s
+		}
+	}
+	t.Fatalf("form has no %q dropdown", label)
+
+	return nil
+}
+
+func TestFormDropdownsSpoofFingerprint(t *testing.T) {
+	t.Parallel()
+
+	m, st := newTestModel(t)
+
+	next, _ := m.Update(key("a"))
+	m = asModel(t, next)
+
+	name, ok := m.form.fields[0].(*textField)
+	if !ok {
+		t.Fatalf("expected first field to be a text field, got %T", m.form.fields[0])
+	}
+	name.input.SetValue("winbox")
+
+	// Advance the OS dropdown one step (default → Windows) and the processor
+	// dropdown four steps (default → 2 → 4 → 6 → 8 cores). "l" cycles forward.
+	findSelect(t, m.form, "operating system").update(key("l"))
+	cpu := findSelect(t, m.form, "processor")
+	for range 4 {
+		cpu.update(key("l"))
+	}
+
+	next, _ = m.submitForm()
+	m = asModel(t, next)
+
+	if m.view != viewDashboard {
+		t.Fatalf("expected to return to dashboard after submit, got %v", m.view)
+	}
+
+	p, err := st.Get("winbox")
+	if err != nil {
+		t.Fatalf("profile %q was not persisted: %v", "winbox", err)
+	}
+	if p.Fingerprint.Platform != "Win32" {
+		t.Errorf("Platform = %q, want Win32", p.Fingerprint.Platform)
+	}
+	if !strings.Contains(p.Fingerprint.UserAgent, "Windows NT 10.0") {
+		t.Errorf("UserAgent = %q, want a Windows UA", p.Fingerprint.UserAgent)
+	}
+	if p.Fingerprint.HardwareConcurrent != 8 {
+		t.Errorf("HardwareConcurrent = %d, want 8", p.Fingerprint.HardwareConcurrent)
 	}
 }

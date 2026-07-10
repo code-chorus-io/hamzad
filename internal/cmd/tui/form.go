@@ -10,21 +10,46 @@ import (
 	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
 )
 
-// formField describes one text input in the add-profile form.
-type formField struct {
-	label       string
-	placeholder string
+// field is one focusable row in the add-profile form: either a free-text input
+// or a fixed-choice dropdown. Rendering reads through the interface while focus
+// and edit changes mutate the concrete value, so implementations use pointer
+// receivers and the form holds them as pointers.
+type field interface {
+	label() string
+	focus() tea.Cmd
+	blur()
+	update(msg tea.Msg) tea.Cmd
+	view() string
 }
 
-// formFields is the ordered set of inputs. The first (name) is required; the
-// rest mirror the most-used flags of `profile add`. Advanced fingerprint fields
-// (WebGL, screen, device memory, …) stay on the CLI for now.
-var formFields = []formField{
-	{label: "name", placeholder: "required, e.g. acme-us"},
-	{label: "proxy", placeholder: "socks5://user:pass@host:1080 (optional)"},
-	{label: "timezone", placeholder: "Europe/Berlin (optional)"},
-	{label: "start-url", placeholder: "https://… (optional)"},
-	{label: "notes", placeholder: "free-form note (optional)"},
+// textField is a single free-text row wrapping a Bubbles textinput.
+type textField struct {
+	name  string
+	input textinput.Model
+}
+
+func newTextField(name, placeholder string) *textField {
+	in := textinput.New()
+	in.Placeholder = placeholder
+	in.Prompt = "> "
+	in.CharLimit = 256
+
+	return &textField{name: name, input: in}
+}
+
+func (t *textField) label() string  { return t.name }
+func (t *textField) focus() tea.Cmd { return t.input.Focus() }
+func (t *textField) blur()          { t.input.Blur() }
+func (t *textField) view() string   { return t.input.View() }
+
+// value returns the trimmed text the user typed.
+func (t *textField) value() string { return strings.TrimSpace(t.input.Value()) }
+
+func (t *textField) update(msg tea.Msg) tea.Cmd {
+	var cmd tea.Cmd
+	t.input, cmd = t.input.Update(msg)
+
+	return cmd
 }
 
 // formModel is the interactive add-profile screen. Its rendering methods read
@@ -33,34 +58,40 @@ var formFields = []formField{
 //
 //nolint:recvcheck // mixed value/pointer receivers are intentional (see above).
 type formModel struct {
-	inputs []textinput.Model
+	fields []field
 	focus  int
 	err    string
 }
 
+// newFormModel builds the ordered set of rows. The first (name) is required; the
+// operating-system and processor dropdowns spoof the matching fingerprint
+// fields, and the remaining text rows mirror the most-used flags of
+// `profile add`. Advanced fingerprint fields (WebGL, screen, device memory, …)
+// stay on the CLI for now.
 func newFormModel() formModel {
-	inputs := make([]textinput.Model, len(formFields))
-	for i, f := range formFields {
-		in := textinput.New()
-		in.Placeholder = f.placeholder
-		in.Prompt = "> "
-		in.CharLimit = 256
-		inputs[i] = in
+	return formModel{
+		fields: []field{
+			newTextField("name", "required, e.g. acme-us"),
+			newOSField(),
+			newProcessorField(),
+			newTextField("proxy", "socks5://user:pass@host:1080 (optional)"),
+			newTextField("timezone", "Europe/Berlin (optional)"),
+			newTextField("start-url", "https://… (optional)"),
+			newTextField("notes", "free-form note (optional)"),
+		},
 	}
-
-	return formModel{inputs: inputs}
 }
 
-// focusCmd focuses the first input when the form opens.
+// focusCmd focuses the first row when the form opens.
 func (f *formModel) focusCmd() tea.Cmd {
-	return f.inputs[f.focus].Focus()
+	return f.fields[f.focus].focus()
 }
 
 // updateForm handles the add-profile screen.
 func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 	key, ok := msg.(tea.KeyPressMsg)
 	if !ok {
-		return m, m.form.updateInputs(msg)
+		return m, m.form.updateFocused(msg)
 	}
 
 	switch key.String() {
@@ -80,8 +111,8 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.form.focusPrev()
 
 	case "enter":
-		// Enter advances between fields and submits from the last one.
-		if m.form.focus < len(m.form.inputs)-1 {
+		// Enter advances between rows and submits from the last one.
+		if m.form.focus < len(m.form.fields)-1 {
 			return m, m.form.focusNext()
 		}
 
@@ -91,20 +122,21 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.submitForm()
 	}
 
-	return m, m.form.updateInputs(msg)
+	// Everything else (including ←/→ for the dropdowns) goes to the focused row.
+	return m, m.form.updateFocused(msg)
 }
 
 // submitForm validates the inputs, persists the new profile (and its encrypted
 // proxy, when given), and returns to the dashboard.
 func (m Model) submitForm() (tea.Model, tea.Cmd) {
-	name := strings.TrimSpace(m.form.value("name"))
+	name := m.form.text("name")
 	if name == "" {
 		m.form.err = "name is required"
 
 		return m, nil
 	}
 
-	proxy := strings.TrimSpace(m.form.value("proxy"))
+	proxy := m.form.text("proxy")
 	if proxy != "" && !m.crypt.Configured() {
 		m.form.err = "encryption not configured; run 'store init' before adding a proxy"
 
@@ -114,10 +146,11 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	p := domain.Profile{
 		Name:     name,
 		Proxy:    proxy,
-		Timezone: strings.TrimSpace(m.form.value("timezone")),
-		StartURL: strings.TrimSpace(m.form.value("start-url")),
-		Notes:    strings.TrimSpace(m.form.value("notes")),
+		Timezone: m.form.text("timezone"),
+		StartURL: m.form.text("start-url"),
+		Notes:    m.form.text("notes"),
 	}
+	m.form.applyFingerprint(&p.Fingerprint)
 
 	if err := m.store.Add(p); err != nil {
 		m.form.err = err.Error()
@@ -140,55 +173,62 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 	return m, m.reloadCmd()
 }
 
-// value returns the trimmed content of the field with the given label.
-func (f formModel) value(label string) string {
-	for i, ff := range formFields {
-		if ff.label == label {
-			return f.inputs[i].Value()
+// text returns the trimmed content of the text field with the given label.
+func (f formModel) text(label string) string {
+	for _, fl := range f.fields {
+		if t, ok := fl.(*textField); ok && t.name == label {
+			return t.value()
 		}
 	}
 
 	return ""
 }
 
-// focusNext moves focus to the next input, wrapping around.
-func (f *formModel) focusNext() tea.Cmd {
-	return f.setFocus((f.focus + 1) % len(f.inputs))
+// applyFingerprint layers the current dropdown selections onto fp. Each dropdown
+// has a no-op default, so untouched rows leave Chrome's own values in place.
+func (f formModel) applyFingerprint(fp *domain.Fingerprint) {
+	for _, fl := range f.fields {
+		if s, ok := fl.(*selectField); ok {
+			s.selected().apply(fp)
+		}
+	}
 }
 
-// focusPrev moves focus to the previous input, wrapping around.
+// focusNext moves focus to the next row, wrapping around.
+func (f *formModel) focusNext() tea.Cmd {
+	return f.setFocus((f.focus + 1) % len(f.fields))
+}
+
+// focusPrev moves focus to the previous row, wrapping around.
 func (f *formModel) focusPrev() tea.Cmd {
-	return f.setFocus((f.focus - 1 + len(f.inputs)) % len(f.inputs))
+	return f.setFocus((f.focus - 1 + len(f.fields)) % len(f.fields))
 }
 
 func (f *formModel) setFocus(i int) tea.Cmd {
-	f.inputs[f.focus].Blur()
+	f.fields[f.focus].blur()
 	f.focus = i
 
-	return f.inputs[f.focus].Focus()
+	return f.fields[f.focus].focus()
 }
 
-// updateInputs forwards a message to the focused input.
-func (f *formModel) updateInputs(msg tea.Msg) tea.Cmd {
-	var cmd tea.Cmd
-	f.inputs[f.focus], cmd = f.inputs[f.focus].Update(msg)
-
-	return cmd
+// updateFocused forwards a message to the focused row.
+func (f *formModel) updateFocused(msg tea.Msg) tea.Cmd {
+	return f.fields[f.focus].update(msg)
 }
 
 func (f formModel) view() string {
 	var b strings.Builder
 	b.WriteString(titleStyle.Render("new profile") + "\n\n")
 
-	for i, field := range formFields {
-		label := field.label
+	for i, fl := range f.fields {
+		label := fl.label()
 		if i == f.focus {
 			label = focusStyle.Render("▸ " + label)
 		} else {
 			label = "  " + label
 		}
-		b.WriteString(labelStyle.Render(padRight(label, 14)))
-		b.WriteString(f.inputs[i].View())
+		b.WriteString(labelStyle.Render(padRight(label, 20)))
+		b.WriteString(fl.view())
 		b.WriteString("\n")
 	}
 
@@ -196,7 +236,8 @@ func (f formModel) view() string {
 	if f.err != "" {
 		b.WriteString(statusStyle.Render(f.err) + "\n\n")
 	}
-	b.WriteString(helpStyle.Render("tab/↑↓ move  •  enter next/submit  •  ctrl+s save  •  esc cancel"))
+	b.WriteString(helpStyle.Render(
+		"tab/↑↓ move  •  ←/→ change option  •  enter next/submit  •  ctrl+s save  •  esc cancel"))
 
 	return b.String()
 }
