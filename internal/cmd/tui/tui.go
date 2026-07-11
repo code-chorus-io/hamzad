@@ -32,7 +32,12 @@ func Command() *cli.Command {
 func run(ctx context.Context, _ *cli.Command) error {
 	cfg := config.From(ctx)
 	st := store.New(cfg.StoreDir)
+
+	// Route encrypted-SSH-key passphrase prompts through a modal on the Bubble
+	// Tea loop; the plain terminal fallback would fight the alt-screen program.
+	unlock := newPassphraseBridge(cfg.IdentityPath)
 	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
+	c.Prompt = unlock.prompt
 
 	execPath := cfg.ChromePath
 	if execPath == "" {
@@ -47,6 +52,7 @@ func run(ctx context.Context, _ *cli.Command) error {
 	}
 
 	prog := tea.NewProgram(model, tea.WithContext(ctx))
+	unlock.attach(prog)
 
 	// Bridge manager events (fired from session goroutines) onto the Bubble Tea
 	// message loop so the model is only ever mutated on the UI goroutine.

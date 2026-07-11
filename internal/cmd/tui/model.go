@@ -16,6 +16,13 @@ import (
 	"github.com/1995parham/koochooloologin/internal/infra/store"
 )
 
+// Shared key-press names, so the several switch statements over them stay in
+// sync (and satisfy goconst).
+const (
+	keyEnter = "enter"
+	keyCtrlC = "ctrl+c"
+)
+
 // view selects which screen the model is showing.
 type view int
 
@@ -55,10 +62,11 @@ type Model struct {
 	crypt crypt.Crypt
 	mgr   *manager.Manager
 
-	view     view
-	table    table.Model
-	profiles []domain.Profile
-	form     formModel
+	view       view
+	table      table.Model
+	profiles   []domain.Profile
+	form       formModel
+	passphrase passphraseModel
 
 	width  int
 	height int
@@ -123,6 +131,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleOpenResult(msg), nil
 	case profilesMsg:
 		return m.handleProfiles(msg), nil
+	case passphraseRequestMsg:
+		return m, m.passphrase.begin(msg)
+	}
+
+	// The unlock modal is application-modal: while a decrypt is blocked waiting
+	// for a passphrase, it captures all input regardless of the active view.
+	if m.passphrase.active {
+		return m, m.passphrase.update(msg)
 	}
 
 	if m.view == viewForm {
@@ -185,7 +201,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 
 	switch key.String() {
-	case "q", "ctrl+c":
+	case "q", keyCtrlC:
 		return m, tea.Quit
 
 	case "a", "n":
@@ -195,7 +211,7 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, m.form.focusCmd()
 
-	case "o", "enter":
+	case "o", keyEnter:
 		if name := m.selectedName(); name != "" {
 			m.status = "opening " + name + "…"
 
@@ -225,9 +241,12 @@ func (m Model) updateDashboard(msg tea.Msg) (tea.Model, tea.Cmd) {
 // View renders the active screen in the alternate screen buffer.
 func (m Model) View() tea.View {
 	var body string
-	if m.view == viewForm {
+	switch {
+	case m.passphrase.active:
+		body = m.passphrase.view(m.width, m.height)
+	case m.view == viewForm:
 		body = m.form.view()
-	} else {
+	default:
 		body = m.dashboardView()
 	}
 

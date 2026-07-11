@@ -7,6 +7,7 @@ package crypt
 import (
 	"bufio"
 	"bytes"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"io"
@@ -19,6 +20,10 @@ import (
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/term"
 )
+
+// ErrWrongPassphrase is returned by CheckSSHPassphrase when the passphrase does
+// not unlock the identity, so callers can offer a retry instead of failing.
+var ErrWrongPassphrase = errors.New("incorrect passphrase")
 
 // ErrNoRecipients is returned when encryption is attempted but no recipients
 // are configured.
@@ -262,6 +267,29 @@ func (c Crypt) encryptedSSHIdentity(pem []byte, missing *ssh.PassphraseMissingEr
 	}
 
 	return id, nil
+}
+
+// CheckSSHPassphrase reports whether passphrase unlocks the SSH private key at
+// identityPath. It returns nil when the key opens (or is not passphrase
+// protected), ErrWrongPassphrase when the passphrase is rejected, and a
+// descriptive error when the key cannot be read or parsed at all. A UI can use
+// it to validate input before committing to a decrypt, so a wrong passphrase is
+// caught in the prompt rather than surfacing as a failed session launch.
+func CheckSSHPassphrase(identityPath string, passphrase []byte) error {
+	pem, err := os.ReadFile(identityPath) //nolint:gosec // identity path is operator-configured, not attacker input
+	if err != nil {
+		return fmt.Errorf("reading identity %q: %w", identityPath, err)
+	}
+
+	if _, err := ssh.ParseRawPrivateKeyWithPassphrase(pem, passphrase); err != nil {
+		if errors.Is(err, x509.IncorrectPasswordError) {
+			return ErrWrongPassphrase
+		}
+
+		return fmt.Errorf("unlocking %q: %w", identityPath, err)
+	}
+
+	return nil
 }
 
 func (c Crypt) askPassphrase(prompt string) ([]byte, error) {

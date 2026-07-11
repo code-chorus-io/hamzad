@@ -101,7 +101,7 @@ func (m Model) updateForm(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		return m, nil
 
-	case "ctrl+c":
+	case keyCtrlC:
 		return m, tea.Quit
 
 	case "tab", "down":
