@@ -64,6 +64,8 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 
 	if opts.DebugPort > 0 {
 		go announceCDP(ctx, opts.DebugPort)
+	} else if dropped := chrome.CleanModeDropped(opts); dropped != "" {
+		fmt.Printf("note: %s not applied on the clean (no-CDP) launch — use --cdp-port to enable them\n", dropped)
 	}
 
 	fmt.Printf("launching %q — close the browser window or press Ctrl-C to end the session\n", name)

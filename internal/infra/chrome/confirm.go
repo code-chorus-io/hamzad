@@ -75,6 +75,39 @@ func expectedConfig(o Options) map[string]string {
 	return exp
 }
 
+// CleanModeDropped names the profile overrides a no-CDP (clean) launch cannot
+// apply, joined into a one-line heads-up, or "" when none are configured. These
+// need either a live CDP session (geolocation) or an injected page script (the
+// fingerprint patches) and take effect only under --cdp-port. Timezone,
+// user-agent, proxy, window size, and language survive as process flags or
+// environment and are never listed here.
+func CleanModeDropped(o Options) string {
+	fp := o.Fingerprint
+
+	var dropped []string
+	if fp.Geolocation != nil {
+		dropped = append(dropped, "geolocation")
+	}
+	if fp.CanvasNoise {
+		dropped = append(dropped, "canvas-noise")
+	}
+	if fp.WebGLVendor != "" || fp.WebGLRenderer != "" {
+		dropped = append(dropped, "webgl")
+	}
+	if fp.HardwareConcurrent > 0 {
+		dropped = append(dropped, "hardware-concurrency")
+	}
+	if fp.DeviceMemory > 0 {
+		dropped = append(dropped, "device-memory")
+	}
+
+	if len(dropped) == 0 {
+		return ""
+	}
+
+	return strings.Join(dropped, ", ")
+}
+
 // startURL returns the page to open first: the profile's own start URL when it
 // pins one, otherwise the configuration confirmation page.
 func startURL(o Options) string {

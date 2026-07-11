@@ -17,7 +17,6 @@ import (
 
 	"github.com/chromedp/cdproto/browser"
 	"github.com/chromedp/cdproto/emulation"
-	"github.com/chromedp/cdproto/fetch"
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
@@ -69,6 +68,13 @@ func Detect() string {
 
 // Launch starts the browser and applies the profile overrides, then blocks
 // until the browser is closed or ctx is cancelled.
+//
+// By default it uses the clean path (launchClean): an ordinary Chrome child
+// process with no CDP session and no remote-debugging port, so none of the
+// automation tells that block sites like Google sign-in are present. When a
+// fixed debug port is requested (o.DebugPort > 0, i.e. `--cdp-port`), it uses
+// the CDP path (launchCDP) instead, which additionally applies the geolocation
+// and injected fingerprint patches that require a live DevTools session.
 func Launch(ctx context.Context, o Options) error {
 	execPath := o.ExecPath
 	if execPath == "" {
@@ -78,26 +84,43 @@ func Launch(ctx context.Context, o Options) error {
 		return ErrNoBrowser
 	}
 
-	// chromedp force-kills Chrome (SIGKILL) when ctx is cancelled — which is how
-	// the TUI closes a session and how Ctrl-C ends the CLI — so Chrome never runs
-	// its own cleanup and leaves the ProcessSingleton lock files behind. On the
-	// next launch of the same profile Chrome would see them, assume another
-	// browser owns the user-data-dir, hand off, and exit ("Opening in existing
-	// browser session."). Only one browser ever owns a profile dir at a time, so
-	// any lock we find here is stale; clear it before launching.
+	// Chrome is force-killed (SIGKILL) when ctx is cancelled — which is how the
+	// TUI closes a session and how Ctrl-C ends the CLI — so it never runs its own
+	// cleanup and leaves the ProcessSingleton lock files behind. On the next
+	// launch of the same profile Chrome would see them, assume another browser
+	// owns the user-data-dir, hand off, and exit ("Opening in existing browser
+	// session."). Only one browser ever owns a profile dir at a time, so any lock
+	// we find here is stale; clear it before launching.
 	clearSingletonLocks(o.UserDataDir)
 
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, execOptions(o, execPath)...)
+	// Resolve the --proxy-server argument, starting a local auth relay when the
+	// profile's proxy carries credentials (Chrome cannot authenticate proxies
+	// itself). The relay is independent of CDP, so both launch paths use it.
+	proxyArg, closeRelay, err := proxyForLaunch(ctx, o)
+	if err != nil {
+		return err
+	}
+	if closeRelay != nil {
+		defer func() { _ = closeRelay() }()
+	}
+
+	if o.DebugPort > 0 {
+		return launchCDP(ctx, o, execPath, proxyArg)
+	}
+
+	return launchClean(ctx, o, execPath, proxyArg)
+}
+
+// launchCDP drives Chrome over the DevTools Protocol via chromedp, applying the
+// full override stack (including geolocation and the injected fingerprint
+// patches). It opens a remote-debugging port, so it is used only when the caller
+// explicitly asks for one with --cdp-port for automation to attach.
+func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error {
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, execOptions(o, execPath, proxyArg)...)
 	defer cancelAlloc()
 
 	taskCtx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
-
-	if o.Proxy != nil && o.Proxy.User != nil {
-		user := o.Proxy.User.Username()
-		pass, _ := o.Proxy.User.Password()
-		listenProxyAuth(taskCtx, user, pass)
-	}
 
 	if err := chromedp.Run(taskCtx, buildActions(o)...); err != nil {
 		return fmt.Errorf("launching chrome: %w", err)
@@ -107,6 +130,88 @@ func Launch(ctx context.Context, o Options) error {
 	<-taskCtx.Done()
 
 	return nil
+}
+
+// launchClean starts Chrome as an ordinary child process with only command-line
+// and environment overrides — no CDP session, no remote-debugging port, and thus
+// none of the automation tells (an open debug port, the Runtime.enable leak)
+// that sites use to block a controlled browser. A plain Chrome even reports
+// navigator.webdriver === false natively, with no patch needed.
+//
+// The tradeoff: overrides that require a live CDP session (geolocation) or an
+// injected page script (the canvas/WebGL/JS fingerprint patches) do not apply
+// here — see CleanModeDropped. Timezone still applies via the TZ environment
+// variable, and user-agent, proxy, window size, and language via flags.
+func launchClean(ctx context.Context, o Options, execPath, proxyArg string) error {
+	// execPath is the operator-configured browser binary and the args are derived
+	// from the user's own profile, so this is not untrusted input.
+	cmd := exec.CommandContext(ctx, execPath, cleanArgs(o, proxyArg)...) //nolint:gosec // G204: operator-controlled browser + own profile
+	cmd.Env = os.Environ()
+	if o.Timezone != "" {
+		cmd.Env = append(cmd.Env, "TZ="+o.Timezone)
+	}
+
+	if err := cmd.Start(); err != nil {
+		return fmt.Errorf("starting chrome: %w", err)
+	}
+
+	err := cmd.Wait()
+	// A ctx cancellation (Ctrl-C or the TUI closing the session) kills Chrome,
+	// which surfaces here as a signal-kill error; that is the normal way a
+	// session ends, not a failure.
+	if ctx.Err() != nil {
+		return nil //nolint:nilerr // ctx-cancel kill is a normal session end, not an error
+	}
+	if err != nil {
+		return fmt.Errorf("chrome exited: %w", err)
+	}
+
+	return nil
+}
+
+// cleanArgs assembles the minimal, human-looking flag set for a clean launch.
+// It deliberately omits the automation-flavored flags chromedp adds by default.
+func cleanArgs(o Options, proxyArg string) []string {
+	args := []string{
+		"--user-data-dir=" + o.UserDataDir,
+		"--no-first-run",
+		"--no-default-browser-check",
+	}
+	if proxyArg != "" {
+		args = append(args, "--proxy-server="+proxyArg)
+	}
+	if ua := o.Fingerprint.UserAgent; ua != "" {
+		args = append(args, "--user-agent="+ua)
+	}
+	if w, h := o.Fingerprint.ScreenWidth, o.Fingerprint.ScreenHeight; w > 0 && h > 0 {
+		args = append(args, fmt.Sprintf("--window-size=%d,%d", w, h))
+	}
+	if langs := o.Fingerprint.Languages; len(langs) > 0 {
+		args = append(args, "--lang="+langs[0])
+	}
+
+	return append(args, startURL(o))
+}
+
+// proxyForLaunch resolves the --proxy-server value for Chrome. An unauthenticated
+// proxy is passed straight through; an authenticated one is fronted by a local
+// relay (returned as a closer to stop on exit) that performs the upstream
+// handshake, since Chrome cannot supply proxy credentials. Returns an empty arg
+// and nil closer when the profile has no proxy.
+func proxyForLaunch(ctx context.Context, o Options) (string, func() error, error) {
+	if o.Proxy == nil {
+		return "", nil, nil
+	}
+	if o.Proxy.User == nil {
+		return proxyServerArg(o.Proxy), nil, nil
+	}
+
+	relay, err := startAuthRelay(ctx, o.Proxy)
+	if err != nil {
+		return "", nil, err
+	}
+
+	return "http://" + relay.Addr(), relay.Close, nil
 }
 
 // clearSingletonLocks removes Chrome's ProcessSingleton files from a profile's
@@ -127,8 +232,10 @@ func clearSingletonLocks(dir string) {
 	}
 }
 
-// execOptions assembles the process-level launch flags for the browser.
-func execOptions(o Options, execPath string) []chromedp.ExecAllocatorOption {
+// execOptions assembles the process-level launch flags for the browser. proxyArg
+// is the pre-resolved --proxy-server value (possibly a local auth relay), empty
+// when the profile has no proxy.
+func execOptions(o Options, execPath, proxyArg string) []chromedp.ExecAllocatorOption {
 	opts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
 	opts = append(opts,
 		chromedp.ExecPath(execPath),
@@ -145,8 +252,8 @@ func execOptions(o Options, execPath string) []chromedp.ExecAllocatorOption {
 	if ua := o.Fingerprint.UserAgent; ua != "" {
 		opts = append(opts, chromedp.UserAgent(ua))
 	}
-	if o.Proxy != nil {
-		opts = append(opts, chromedp.ProxyServer(proxyServerArg(o.Proxy)))
+	if proxyArg != "" {
+		opts = append(opts, chromedp.ProxyServer(proxyArg))
 	}
 	if w, h := o.Fingerprint.ScreenWidth, o.Fingerprint.ScreenHeight; w > 0 && h > 0 {
 		opts = append(opts, chromedp.WindowSize(w, h))
@@ -167,36 +274,11 @@ func proxyServerArg(u *url.URL) string {
 	return fmt.Sprintf("%s://%s", u.Scheme, u.Host)
 }
 
-// listenProxyAuth answers proxy authentication challenges with the supplied
-// credentials, since Chrome cannot take them from the --proxy-server URL.
-func listenProxyAuth(ctx context.Context, user, pass string) {
-	chromedp.ListenTarget(ctx, func(ev any) {
-		switch e := ev.(type) {
-		case *fetch.EventAuthRequired:
-			go func() {
-				_ = chromedp.Run(ctx, fetch.ContinueWithAuth(e.RequestID, &fetch.AuthChallengeResponse{
-					Response: fetch.AuthChallengeResponseResponseProvideCredentials,
-					Username: user,
-					Password: pass,
-				}))
-			}()
-		case *fetch.EventRequestPaused:
-			go func() {
-				_ = chromedp.Run(ctx, fetch.ContinueRequest(e.RequestID))
-			}()
-		}
-	})
-}
-
 // buildActions assembles the CDP actions that apply the profile overrides
-// before the first navigation.
+// before the first navigation. Proxy authentication is handled out-of-band by
+// the local relay (see proxyForLaunch), so no Fetch auth interception is needed.
 func buildActions(o Options) []chromedp.Action {
 	var acts []chromedp.Action
-
-	// Enable request interception first so proxy auth challenges are caught.
-	if o.Proxy != nil && o.Proxy.User != nil {
-		acts = append(acts, fetch.Enable().WithHandleAuthRequests(true))
-	}
 
 	acts = append(acts, identityActions(o.Fingerprint)...)
 	acts = append(acts, environmentActions(o)...)

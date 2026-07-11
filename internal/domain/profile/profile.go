@@ -21,11 +21,12 @@ var ErrUnsupportedProxyScheme = errors.New("unsupported proxy scheme (want http,
 var ErrProxyMissingHost = errors.New("proxy is missing host:port")
 
 // ErrProxyAuthUnsupported is returned for a proxy that carries credentials on a
-// scheme Chrome cannot authenticate. Chromium has no support for authenticated
-// SOCKS proxies (neither via --proxy-server nor the CDP Fetch auth challenge,
-// which only fires for HTTP 407s), so such credentials would be silently
-// dropped and the connection would fail. Use an http/https proxy for user:pass.
-var ErrProxyAuthUnsupported = errors.New("proxy scheme cannot authenticate credentials (Chrome does not support authenticated SOCKS proxies; use http/https for user:pass)")
+// scheme with no username/password auth method. SOCKS4 authenticates only a
+// bare userid (no password), so a user:pass on it cannot be honored. HTTP,
+// HTTPS, and SOCKS5 credentials are supported: koochooloologin routes an
+// authenticated proxy through a local relay (see infra/chrome) that performs the
+// upstream handshake, since Chrome cannot supply proxy credentials itself.
+var ErrProxyAuthUnsupported = errors.New("proxy scheme cannot authenticate credentials (SOCKS4 has no user/pass auth; use http, https, or socks5 for user:pass)")
 
 // nameRE constrains profile names to a filesystem- and git-friendly shape so a
 // name can double as a directory component in the store.
@@ -120,9 +121,11 @@ func ParseProxy(raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("%w: %q", ErrProxyMissingHost, raw)
 	}
 
-	// Chrome cannot authenticate SOCKS proxies; reject credentials up front
-	// rather than let them be dropped and the connection fail opaquely.
-	if u.User != nil && (u.Scheme == "socks4" || u.Scheme == "socks5") {
+	// SOCKS4 has no username/password auth method (only a bare userid), so
+	// credentials on it cannot be honored; reject them up front rather than let
+	// them be dropped and the connection fail opaquely. HTTP/HTTPS/SOCKS5
+	// credentials are handled by the launch-time auth relay.
+	if u.User != nil && u.Scheme == "socks4" {
 		return nil, fmt.Errorf("%w: %q", ErrProxyAuthUnsupported, u.Scheme)
 	}
 
