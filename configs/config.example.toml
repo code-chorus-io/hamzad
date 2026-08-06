@@ -7,6 +7,12 @@
 # Path to the Chrome/Chromium executable. Leave empty to auto-detect from PATH.
 chrome_path = ""
 
+# Pin a managed Chrome for Testing build, downloaded with `browser install`
+# (e.g. "151.0.7922.76"). It outranks a detected system browser, so the engine
+# stays matched to the fingerprint a profile was built around — and so everyone
+# sharing a profile runs the same one. Leave empty to use whatever the host has.
+chrome_version = ""
+
 # Directory holding the profile store (a git repository). Defaults to
 # $XDG_CONFIG_HOME/koochooloologin (typically ~/.config/koochooloologin).
 store_dir = ""

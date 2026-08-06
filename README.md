@@ -15,7 +15,21 @@ just build      # produces ./koochooloologin
 just snapshot   # builds the release archives into ./dist, publishing nothing
 ```
 
-You also need a Chrome/Chromium binary. It is auto-detected from `PATH`; set `--chrome-path` or `chrome_path` in the config if it lives elsewhere.
+You also need a browser. Either bring your own — auto-detected from `PATH`, or set `--chrome-path` / `chrome_path` — or let koochooloologin fetch one:
+
+```sh
+koochooloologin browser install stable   # ~190 MB, Chrome for Testing
+koochooloologin browser list
+koochooloologin browser path             # which binary a launch would use
+```
+
+Downloads go to `~/.cache/koochooloologin/browsers/<version>/` and never auto-update. Nothing is fetched implicitly: `profile open` will not pull a browser mid-command, it tells you which `browser install` to run.
+
+Pinning a version with `chrome_version` is worth doing. A profile's user-agent is only convincing while it matches the engine actually rendering the page, and a teammate resuming a shared profile on their own Chrome is running a subtly different identity than the one you shared.
+
+**Why Chrome for Testing and not Chromium.** Chromium's openness buys nothing without recompiling it, and a stock Chromium binary is *more* identifiable than Chrome: no proprietary codecs (H.264/AAC), `"Chromium"` rather than `"Google Chrome"` in its user-agent client-hint brands, and no Widevine — three signals a fingerprinter reads for free. Chrome for Testing is the same browser Google ships to users, just pinned and packaged for automation. If you want engine-level spoofing, the answer is a *patched* Chromium you build yourself (GoLogin's "Orbita" and friends), pointed at with `--chrome-path`.
+
+On Linux the archive carries no system libraries, so a minimal desktop or container needs a handful installed separately. `browser install` runs the binary once and tells you exactly which are missing rather than leaving it to fail at launch. There is no `linux-arm64` build — Google publishes none — so on that platform bring your own browser.
 
 ## Quick start
 
@@ -110,6 +124,8 @@ Mind the ❌ on `navigator.platform`: an operating-system preset sets the platfo
 The default landing page reports every configured value beside the one the browser actually hands to page JavaScript, so a launch can be verified at a glance.
 
 For high-scrutiny targets the JS-patched signals need a patched Chromium (GoLogin's "Orbita"); the launch layer is designed so such a binary can be swapped in via `--chrome-path` without changing the CLI.
+
+Two known leaks in the current spoofing, both inherent to patching from JavaScript rather than in the engine. The injected patches run only in the page's main world, so reading `navigator.hardwareConcurrency` or `deviceMemory` inside a `Worker` returns the real host values — a standard check. And the `--cdp-port` path enables the CDP `Runtime` domain, which is itself a signal some anti-bot services probe for. The CDP-native overrides (user-agent, timezone, geolocation, device metrics) are engine-level and have neither problem.
 
 Canvas noise is a single fixed pattern rather than a per-profile one: it hides a profile's canvas from the host's own fingerprint, but two noised profiles still hash alike, so it does not defeat cross-profile linking.
 
