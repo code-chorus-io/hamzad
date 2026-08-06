@@ -39,9 +39,11 @@ func run(ctx context.Context, _ *cli.Command) error {
 	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
 	c.Prompt = unlock.prompt
 
-	execPath := cfg.ChromePath
-	if execPath == "" {
-		execPath = chrome.Detect()
+	// Resolve once at startup so a missing or unpinned browser is reported here
+	// rather than as a failed session on every profile the user opens.
+	execPath, err := chrome.Resolve(cfg.ChromePath, cfg.ChromeVersion)
+	if err != nil {
+		return err
 	}
 
 	mgr := manager.New(st, c, execPath)

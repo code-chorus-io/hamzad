@@ -121,8 +121,14 @@ func openOptions(ctx context.Context, cmd *cli.Command, st *store.Store, c crypt
 		return chrome.Options{}, err
 	}
 
+	cfg := config.From(ctx)
+	execPath, err := chrome.Resolve(cfg.ChromePath, cfg.ChromeVersion)
+	if err != nil {
+		return chrome.Options{}, err
+	}
+
 	opts := chrome.Options{
-		ExecPath:    config.From(ctx).ChromePath,
+		ExecPath:    execPath,
 		UserDataDir: st.UserDataDir(name),
 		Timezone:    p.Timezone,
 		StartURL:    p.StartURL,

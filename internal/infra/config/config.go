@@ -26,6 +26,11 @@ type Config struct {
 	// ChromePath is the path to the Chrome/Chromium executable. When empty,
 	// the launcher auto-detects a browser from well-known locations.
 	ChromePath string `json:"chrome_path" koanf:"chrome_path"`
+	// ChromeVersion pins a managed Chrome for Testing build (e.g. "151.0.7922.76")
+	// installed with `browser install`. It outranks a detected system browser, so
+	// a profile's fingerprint stays matched to the engine it was built around.
+	// Empty means "use whatever the host has".
+	ChromeVersion string `json:"chrome_version" koanf:"chrome_version"`
 	// StoreDir is the directory holding the profile store (a git repository).
 	StoreDir string `json:"store_dir" koanf:"store_dir"`
 	// IdentityPath is the age or SSH private key used to decrypt secrets and
@@ -36,9 +41,10 @@ type Config struct {
 // Default returns the hardcoded configuration defaults.
 func Default() Config {
 	return Config{
-		ChromePath:   "",
-		StoreDir:     defaultStoreDir(),
-		IdentityPath: defaultIdentityPath(),
+		ChromePath:    "",
+		ChromeVersion: "",
+		StoreDir:      defaultStoreDir(),
+		IdentityPath:  defaultIdentityPath(),
 	}
 }
 
