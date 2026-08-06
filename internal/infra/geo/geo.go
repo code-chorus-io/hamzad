@@ -15,12 +15,21 @@ import (
 	"time"
 )
 
-// Endpoint is the IP-geolocation service. ip-api.com is keyless and returns the
+// Endpoint is the IP-geolocation service. ipwho.is is keyless and returns the
 // IANA timezone plus coordinates and country code in one call.
-const Endpoint = "http://ip-api.com/json/?fields=status,message,query,countryCode,timezone,lat,lon"
+//
+// It is queried over HTTPS deliberately. The whole point of the lookup is to ask
+// what the world sees at the proxy's exit, and the question travels through that
+// very proxy — so over plain HTTP the proxy operator could rewrite the answer and
+// choose the timezone and coordinates the profile then pins. TLS reduces that to
+// needing a certificate the local trust store accepts.
+const Endpoint = "https://ipwho.is/?fields=ip,success,message,country_code,latitude,longitude,timezone"
 
 // ErrLookupFailed is returned when the geolocation service reports a failure.
 var ErrLookupFailed = errors.New("geo lookup failed")
+
+// ErrProxySchemeUnsupported is returned for a proxy the HTTP client cannot dial.
+var ErrProxySchemeUnsupported = errors.New("geo lookup cannot route through this proxy scheme")
 
 // Location is the resolved geolocation of an exit IP.
 type Location struct {
@@ -32,19 +41,30 @@ type Location struct {
 }
 
 type apiResponse struct {
-	Status      string  `json:"status"`
+	Success     bool    `json:"success"`
 	Message     string  `json:"message"`
-	Query       string  `json:"query"`
-	CountryCode string  `json:"countryCode"`
-	Timezone    string  `json:"timezone"`
-	Lat         float64 `json:"lat"`
-	Lon         float64 `json:"lon"`
+	IP          string  `json:"ip"`
+	CountryCode string  `json:"country_code"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
+	// Timezone is an object; only its IANA id matters here.
+	Timezone struct {
+		ID string `json:"id"`
+	} `json:"timezone"`
 }
 
 // Lookup resolves the exit location, routing through proxy when it is non-nil.
 func Lookup(ctx context.Context, proxy *url.URL) (Location, error) {
 	transport := &http.Transport{}
 	if proxy != nil {
+		// net/http dials http, https, socks5 and socks5h proxies; socks4 has no
+		// support at all and would otherwise surface as an opaque transport
+		// error at request time.
+		if _, ok := dialableSchemes[proxy.Scheme]; !ok {
+			return Location{}, fmt.Errorf(
+				"%w: %q (the browser can still use it; run 'profile geo' without a socks4 proxy, or set the timezone by hand)",
+				ErrProxySchemeUnsupported, proxy.Scheme)
+		}
 		transport.Proxy = http.ProxyURL(proxy)
 	}
 	client := &http.Client{Timeout: 15 * time.Second, Transport: transport}
@@ -64,15 +84,23 @@ func Lookup(ctx context.Context, proxy *url.URL) (Location, error) {
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		return Location{}, fmt.Errorf("decoding geo response: %w", err)
 	}
-	if body.Status != "success" {
+	if !body.Success {
 		return Location{}, fmt.Errorf("%w: %s", ErrLookupFailed, body.Message)
 	}
 
 	return Location{
-		IP:          body.Query,
+		IP:          body.IP,
 		CountryCode: body.CountryCode,
-		Timezone:    body.Timezone,
-		Latitude:    body.Lat,
-		Longitude:   body.Lon,
+		Timezone:    body.Timezone.ID,
+		Latitude:    body.Latitude,
+		Longitude:   body.Longitude,
 	}, nil
+}
+
+// dialableSchemes are the proxy transports net/http can route a request through.
+var dialableSchemes = map[string]struct{}{
+	"http":    {},
+	"https":   {},
+	"socks5":  {},
+	"socks5h": {},
 }
