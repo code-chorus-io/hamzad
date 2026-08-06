@@ -19,3 +19,11 @@ tidy:
 
 update:
     @cd ./cmd/koochooloologin && go get -u
+
+# validate the release configuration
+release-check:
+    goreleaser check
+
+# build the release archives locally, publishing nothing
+snapshot:
+    goreleaser release --snapshot --clean --skip=publish

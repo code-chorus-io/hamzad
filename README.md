@@ -6,10 +6,13 @@ It drives an ordinary Chrome/Chromium — no patched browser. By default a profi
 
 ## Install
 
+Prebuilt static binaries for Linux, macOS, and Windows (amd64 and arm64) are attached to every [release](https://github.com/1995parham/koochooloologin/releases). Download the archive for your platform, check it against the release's `checksums.txt`, and put `koochooloologin` on your `PATH`.
+
 ```sh
 go install github.com/1995parham/koochooloologin/cmd/koochooloologin@latest
 # or, from a checkout:
 just build      # produces ./koochooloologin
+just snapshot   # builds the release archives into ./dist, publishing nothing
 ```
 
 You also need a Chrome/Chromium binary. It is auto-detected from `PATH`; set `--chrome-path` or `chrome_path` in the config if it lives elsewhere.

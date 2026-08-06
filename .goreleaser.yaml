@@ -1,0 +1,70 @@
+# yaml-language-server: $schema=https://goreleaser.com/static/schema.json
+version: 2
+
+project_name: koochooloologin
+
+before:
+  hooks:
+    - go mod download
+
+builds:
+  - id: koochooloologin
+    main: ./cmd/koochooloologin
+    binary: koochooloologin
+    # A static binary runs on any glibc/musl host, which matters because the
+    # release archives are pulled onto machines we know nothing about.
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    # No -X for the version: the CLI reports versioninfo.Short(), which reads
+    # the tag and revision Go itself stamps into the build. An -X on
+    # versioninfo.Version would be overwritten by that package's own init.
+    ldflags:
+      - -s -w
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: koochooloologin
+    formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: >-
+      {{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}
+    files:
+      - README.md
+      - LICENSE
+      - configs/config.example.toml
+
+checksum:
+  name_template: checksums.txt
+
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  use: github
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"
+      - "^style:"
+      - "Merge pull request"
+
+release:
+  # A tag like v1.2.3-rc1 publishes as a pre-release without extra ceremony.
+  prerelease: auto
+  footer: |
+    ---
+    Built by [GoReleaser](https://goreleaser.com). Verify a download against
+    `checksums.txt` before running it.
