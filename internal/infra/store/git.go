@@ -84,7 +84,10 @@ func (s *Store) Remote(ctx context.Context) string {
 	return out
 }
 
-// Dirty reports whether the tracked configuration has uncommitted changes.
+// Dirty reports whether the store has changes — tracked or untracked — that a
+// sync would commit. Untracked files count because Sync stages everything the
+// store owns, so a new secrets/<name>.age is pending work just like an edited
+// profiles.toml.
 func (s *Store) Dirty(ctx context.Context) (bool, error) {
 	out, err := s.git(ctx, "status", "--porcelain")
 	if err != nil {
@@ -94,22 +97,43 @@ func (s *Store) Dirty(ctx context.Context) (bool, error) {
 	return out != "", nil
 }
 
-// Sync commits any local changes to profiles.toml, pulls with rebase, and
-// pushes to origin when one is configured. It is the one-shot "share" action.
+// staged reports whether the index holds anything to commit. It is checked
+// against the index rather than the worktree because `git commit` fails outright
+// when nothing is staged, and untracked-but-ignored files (the unencrypted
+// data/<name>/ working copies) must not be mistaken for pending work.
+func (s *Store) staged(ctx context.Context) (bool, error) {
+	// --cached diffs the index against HEAD, and degrades to "everything is new"
+	// on a repository that has no commits yet, which is exactly the first sync.
+	out, err := s.git(ctx, "diff", "--cached", "--name-only")
+	if err != nil {
+		return false, err
+	}
+
+	return out != "", nil
+}
+
+// Sync commits any local store changes, pulls with rebase, and pushes to origin
+// when one is configured. It is the one-shot "share" action.
 func (s *Store) Sync(ctx context.Context, message string) error {
 	if !s.IsRepo(ctx) {
 		return fmt.Errorf("%w: run 'store init' first", ErrNoGit)
 	}
 
-	if _, err := s.git(ctx, "add", profilesFile, ".gitignore"); err != nil {
+	// Stage the whole store, not a fixed file list: the shared artifacts are
+	// profiles.toml, recipients.txt, the encrypted secrets/<name>.age and the
+	// encrypted data/<name>.tar.age bundles, and naming only the first of those
+	// would silently leave every secret and session behind. -A also records the
+	// deletions left by `profile remove`. The store's .gitignore keeps the
+	// unencrypted data/<name>/ working copies local.
+	if _, err := s.git(ctx, "add", "-A", "."); err != nil {
 		return err
 	}
 
-	dirty, err := s.Dirty(ctx)
+	staged, err := s.staged(ctx)
 	if err != nil {
 		return err
 	}
-	if dirty {
+	if staged {
 		if message == "" {
 			message = "sync profiles"
 		}

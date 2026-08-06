@@ -29,7 +29,12 @@ const (
 	dataDir      = "data"
 	// The unencrypted working browser data stays local; the encrypted
 	// data/<name>.tar.age bundles are shared, so only subdirectories are ignored.
-	gitignoreBody = "# unencrypted working browser data stays local (encrypted bundles are shared)\n/data/*/\n"
+	// The half-written temp files of an interrupted save are excluded too, since
+	// Sync stages the whole store and would otherwise be able to commit one.
+	gitignoreBody = "# unencrypted working browser data stays local (encrypted bundles are shared)\n" +
+		"/data/*/\n" +
+		"/.profiles-*.toml\n" +
+		"/data/.*.tmp\n"
 )
 
 // Store is a handle to an on-disk profile store rooted at Dir.
