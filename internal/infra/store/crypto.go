@@ -31,6 +31,11 @@ var ErrNoSecret = errors.New("no secret stored for profile")
 // extraction directory (tar traversal).
 var errBundleEscape = errors.New("bundle entry escapes the target directory")
 
+// errBundleEntryTooLarge is returned when a bundle member exceeds maxBundleEntry.
+// Failing loudly beats extracting a truncated prefix, which would look like a
+// successful restore and hand Chrome a corrupt profile.
+var errBundleEntryTooLarge = errors.New("bundle entry is too large")
+
 // RecipientsPath is the path to the committed recipients file.
 func (s *Store) RecipientsPath() string {
 	return filepath.Join(s.Dir, recipientsFile)
@@ -358,7 +363,7 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dir, target string) error 
 		if err := os.MkdirAll(filepath.Dir(target), 0o750); err != nil {
 			return fmt.Errorf("creating parent of %q: %w", target, err)
 		}
-		if err := writeRegular(tr, target, header.FileInfo().Mode().Perm()); err != nil {
+		if err := writeRegular(tr, target, header.FileInfo().Mode().Perm(), maxBundleEntry); err != nil {
 			return err
 		}
 	default:
@@ -368,7 +373,9 @@ func extractEntry(tr *tar.Reader, header *tar.Header, dir, target string) error 
 	return nil
 }
 
-func writeRegular(tr *tar.Reader, target string, mode os.FileMode) error {
+// writeRegular extracts one regular file, refusing an entry larger than limit
+// rather than writing a silently truncated prefix of it.
+func writeRegular(tr io.Reader, target string, mode os.FileMode, limit int64) error {
 	//nolint:gosec // target is validated by safeJoin against directory traversal
 	out, err := os.OpenFile(target, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, mode.Perm())
 	if err != nil {
@@ -376,8 +383,14 @@ func writeRegular(tr *tar.Reader, target string, mode os.FileMode) error {
 	}
 	defer func() { _ = out.Close() }()
 
-	if _, err := io.CopyN(out, tr, maxBundleEntry); err != nil && !errors.Is(err, io.EOF) {
+	// Copy one byte past the cap: coming back with limit+1 bytes is what
+	// distinguishes an oversized entry from one that ends exactly on it.
+	n, err := io.CopyN(out, tr, limit+1)
+	if err != nil && !errors.Is(err, io.EOF) {
 		return fmt.Errorf("writing %q: %w", target, err)
+	}
+	if n > limit {
+		return fmt.Errorf("%w: %q exceeds %d bytes", errBundleEntryTooLarge, target, limit)
 	}
 
 	return nil
