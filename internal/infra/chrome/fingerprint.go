@@ -95,23 +95,47 @@ func screenPatch(w, h int) string {
   } catch (e) {}`, w, h, w, h)
 }
 
-// canvasNoisePatch perturbs canvas readback so per-profile canvas hashes differ
+// canvasChannelShifts are the per-channel folding distances of the canvas-noise
+// mask: channel c flips a pixel's low bit when (p ^ (p >> shift)) is odd, for
+// pixel index p. Folding a shifted copy of the index back onto itself is what
+// makes the three channels flip on different pixels — masks derived from the
+// index alone (p*k) share p's parity and would flip in lockstep — and a
+// non-zero shift is what keeps the mask from collapsing to a constant.
+// See TestCanvasNoiseMaskPerturbsPixels, which pins both properties.
+var canvasChannelShifts = [3]uint{3, 5, 7}
+
+// canvasNoiseMask reports the low-bit flip (0 or 1) applied to pixel p on the
+// channel using the given shift. It is the Go mirror of the expression the
+// injected script evaluates, so a test can verify the mask the browser will
+// actually compute.
+func canvasNoiseMask(p int, shift uint) int {
+	return (p ^ (p >> shift)) & 1
+}
+
+// canvasNoisePatch perturbs canvas readback so a profile's canvas hash differs
 // from the host's, without visibly altering rendered output.
 //
-// The perturbation flips the low bit of each RGB channel by a fixed,
-// position-derived pattern, so it is deterministic: the same canvas always
+// The perturbation flips the low bit of each RGB channel by a fixed pattern
+// derived from the pixel index, so it is deterministic: the same canvas always
 // hashes to the same (host-distinct) value, and the toDataURL and getImageData
 // paths agree with each other. Crucially, the noise is only ever applied to a
 // copy of the pixels being read out — the source canvas is never written back
 // to — so repeated reads stay stable and the visible canvas is never corrupted.
+//
+// The pattern is the same for every profile, so this hides a canvas from the
+// host's own fingerprint but does not make two noised profiles distinguishable
+// from each other. Per-profile seeding would need a seed on the profile model.
 func canvasNoisePatch() string {
-	return `  try {
-    // Flip the low bit of the R/G/B channels by a fixed per-position pattern.
+	return fmt.Sprintf(`  try {
+    // Flip the low bit of the R/G/B channels by a fixed per-pixel pattern.
+    // i steps by 4, so the mask must key off the pixel index i>>2: any mask
+    // built from i alone is always even, and would flip nothing at all.
     const noise = (data) => {
       for (let i = 0; i < data.length; i += 4) {
-        data[i]   ^= (i * 13) & 1;
-        data[i+1] ^= (i * 7)  & 1;
-        data[i+2] ^= (i * 3)  & 1;
+        const p = i >> 2;
+        data[i]   ^= (p ^ (p >> %d)) & 1;
+        data[i+1] ^= (p ^ (p >> %d)) & 1;
+        data[i+2] ^= (p ^ (p >> %d)) & 1;
       }
     };
     const rawGetImageData = CanvasRenderingContext2D.prototype.getImageData;
@@ -142,5 +166,5 @@ func canvasNoisePatch() string {
         return rawToDataURL.apply(this, arguments);
       }
     };
-  } catch (e) {}`
+  } catch (e) {}`, canvasChannelShifts[0], canvasChannelShifts[1], canvasChannelShifts[2])
 }
