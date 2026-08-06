@@ -51,11 +51,8 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	if !cmd.Bool("no-restore") && st.HasBundle(name) && !dirExists(st.UserDataDir(name)) {
-		fmt.Printf("restoring encrypted session for %q…\n", name)
-		if err := st.UnpackBundle(c, name); err != nil {
-			return err
-		}
+	if err := restoreSession(st, c, name, cmd.Bool("no-restore")); err != nil {
+		return err
 	}
 
 	// Tie the browser lifetime to Ctrl-C as well as window close.
@@ -74,6 +71,29 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 	}
 
 	return saveSession(cmd, st, c, name)
+}
+
+// restoreSession decrypts the shared bundle over the working directory, unless
+// disabled, absent, or outvoted by a local working copy.
+func restoreSession(st *store.Store, c crypt.Crypt, name string, disabled bool) error {
+	if disabled || !st.HasBundle(name) {
+		return nil
+	}
+
+	// Local data wins: unpacking replaces the working directory outright, and it
+	// may hold browsing the bundle predates. Say so out loud, though — otherwise
+	// a teammate who has opened this profile before pulls a newer shared session
+	// and watches `open` silently ignore it.
+	if dirExists(st.UserDataDir(name)) {
+		fmt.Printf("note: keeping the local session for %q — the shared bundle was not restored "+
+			"(run 'profile pull %s' to replace the local copy with it)\n", name, name)
+
+		return nil
+	}
+
+	fmt.Printf("restoring encrypted session for %q…\n", name)
+
+	return st.UnpackBundle(c, name)
 }
 
 // saveSession re-encrypts the working data into the shared bundle after a
