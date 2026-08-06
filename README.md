@@ -135,4 +135,6 @@ See [`configs/config.example.toml`](configs/config.example.toml). Every key is a
 
 ## License
 
-Apache-2.0. See [LICENSE](LICENSE).
+GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+Relicensed from Apache-2.0 in v0.3.0, when the proxy layer moved onto [sing-box](https://github.com/SagerNet/sing-box). sing-box is GPL-3.0-or-later, and linking it makes the combined work GPL-3.0 — so the project follows. In practice: you may use, modify and redistribute this freely, but a distributed binary must come with its source under the same terms.
