@@ -101,6 +101,12 @@ func Launch(ctx context.Context, o Options) error {
 	// we find here is stale; clear it before launching.
 	clearSingletonLocks(o.UserDataDir)
 
+	// Advisory: a profile that cannot get its bookmark bar is still perfectly
+	// launchable, so this must never block the browser from opening.
+	if err := seedBookmarks(o.UserDataDir); err != nil {
+		fmt.Fprintf(os.Stderr, "note: could not seed bookmarks: %v\n", err)
+	}
+
 	// Resolve the --proxy-server argument, starting a local auth relay when the
 	// profile's proxy carries credentials (Chrome cannot authenticate proxies
 	// itself). The relay is independent of CDP, so both launch paths use it.
