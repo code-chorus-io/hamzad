@@ -24,7 +24,8 @@ import (
 )
 
 // ErrNoBrowser is returned when no Chrome/Chromium executable can be located.
-var ErrNoBrowser = errors.New("no chrome or chromium executable found; set chrome_path")
+var ErrNoBrowser = errors.New(
+	"no chrome or chromium executable found; run 'browser install' to fetch one, or set chrome_path")
 
 // Options configures a single browser launch.
 type Options struct {
@@ -50,10 +51,20 @@ type Options struct {
 // common executable names, or an empty string when none is present.
 func Detect() string {
 	names := []string{"google-chrome", "google-chrome-stable", "chromium", "chromium-browser", "chrome"}
-	if runtime.GOOS == "darwin" {
+
+	switch runtime.GOOS {
+	case "darwin":
 		names = append(names,
 			"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
 			"/Applications/Chromium.app/Contents/MacOS/Chromium",
+		)
+	case "windows":
+		// Chrome installs outside PATH on Windows, so the bare names above never
+		// match and the well-known locations are the only ones that will.
+		names = append(names,
+			`C:\Program Files\Google\Chrome\Application\chrome.exe`,
+			`C:\Program Files (x86)\Google\Chrome\Application\chrome.exe`,
+			filepath.Join(os.Getenv("LOCALAPPDATA"), `Google\Chrome\Application\chrome.exe`),
 		)
 	}
 
@@ -76,12 +87,9 @@ func Detect() string {
 // the CDP path (launchCDP) instead, which additionally applies the geolocation
 // and injected fingerprint patches that require a live DevTools session.
 func Launch(ctx context.Context, o Options) error {
-	execPath := o.ExecPath
-	if execPath == "" {
-		execPath = Detect()
-	}
-	if execPath == "" {
-		return ErrNoBrowser
+	execPath, err := Resolve(o.ExecPath, "")
+	if err != nil {
+		return err
 	}
 
 	// Chrome is force-killed (SIGKILL) when ctx is cancelled — which is how the
