@@ -344,6 +344,12 @@ func sessionStatusLine(s manager.Session) string {
 		return fmt.Sprintf("%s: %v", s.Name, s.Err)
 	}
 
+	// A launch note (dropped overrides, an unrestored bundle) is only worth
+	// showing while the session it describes is still live.
+	if s.Note != "" && s.Status.Active() {
+		return fmt.Sprintf("%s: %s — note: %s", s.Name, s.Status, s.Note)
+	}
+
 	return fmt.Sprintf("%s: %s", s.Name, s.Status)
 }
 

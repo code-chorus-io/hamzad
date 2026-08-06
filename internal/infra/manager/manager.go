@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -72,7 +73,12 @@ type Session struct {
 	Status    Status
 	StartedAt time.Time
 	DebugPort int
-	Err       error
+	// Note carries non-fatal heads-up text about how the session launched — the
+	// overrides a clean launch dropped, or a shared bundle left unrestored. The
+	// CLI prints the same warnings to stdout; the TUI has no stdout to print to,
+	// so they ride along on the session instead.
+	Note string
+	Err  error
 }
 
 // OpenOpts tunes a single Open call, mirroring the flags of `profile open`.
@@ -90,6 +96,7 @@ type session struct {
 	status    Status
 	startedAt time.Time
 	debugPort int
+	note      string
 	err       error
 	cancel    context.CancelFunc
 }
@@ -100,6 +107,7 @@ func (s *session) snapshot() Session {
 		Status:    s.status,
 		StartedAt: s.startedAt,
 		DebugPort: s.debugPort,
+		Note:      s.note,
 		Err:       s.err,
 	}
 }
@@ -202,12 +210,11 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 	m.mu.Unlock()
 	m.emit(name)
 
-	if !o.NoRestore {
-		if err := m.restore(name); err != nil {
-			m.fail(name, err)
+	keptLocal, err := m.restore(name, o.NoRestore)
+	if err != nil {
+		m.fail(name, err)
 
-			return err
-		}
+		return err
 	}
 
 	opts, err := m.buildOptions(ctx, name, o)
@@ -225,6 +232,7 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 	s.cancel = cancel
 	s.status = StatusRunning
 	s.debugPort = o.DebugPort
+	s.note = launchNotes(keptLocal, o.DebugPort, opts)
 	m.mu.Unlock()
 	m.emit(name)
 
@@ -252,6 +260,26 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 	})
 
 	return nil
+}
+
+// launchNotes assembles the non-fatal heads-up text for a session the UI has no
+// other channel to hear about: a shared bundle left unrestored, and the
+// overrides a no-CDP launch cannot apply. The latter matters most here, since
+// the TUI's operating-system preset pairs a platform with a user-agent and a
+// clean launch applies only the user-agent.
+func launchNotes(keptLocal bool, debugPort int, opts chrome.Options) string {
+	var notes []string
+
+	if keptLocal {
+		notes = append(notes, "kept local session, shared bundle not restored")
+	}
+	if debugPort == 0 {
+		if dropped := chrome.CleanModeDropped(opts); dropped != "" {
+			notes = append(notes, dropped+" not applied without a CDP port")
+		}
+	}
+
+	return strings.Join(notes, "; ")
 }
 
 // Close cancels the named session's browser, if it is live. The session's
@@ -301,15 +329,23 @@ func (m *Manager) fail(name string, err error) {
 }
 
 // restore decrypts the shared session bundle over the local working data when a
-// bundle exists and no working copy is present yet, mirroring `profile open`.
-func (m *Manager) restore(name string) error {
-	if m.store.HasBundle(name) && !dirExists(m.store.UserDataDir(name)) {
-		if err := m.store.UnpackBundle(m.crypt, name); err != nil {
-			return fmt.Errorf("restoring session for %q: %w", name, err)
-		}
+// bundle exists and no working copy is present yet, mirroring `profile open`'s
+// restoreSession. It reports whether a bundle was deliberately left unrestored
+// because local data won, so the caller can say so rather than let it pass
+// unnoticed.
+func (m *Manager) restore(name string, disabled bool) (bool, error) {
+	if disabled || !m.store.HasBundle(name) {
+		return false, nil
+	}
+	if dirExists(m.store.UserDataDir(name)) {
+		return true, nil
 	}
 
-	return nil
+	if err := m.store.UnpackBundle(m.crypt, name); err != nil {
+		return false, fmt.Errorf("restoring session for %q: %w", name, err)
+	}
+
+	return false, nil
 }
 
 // save re-encrypts the working data into the shared bundle when encryption is
