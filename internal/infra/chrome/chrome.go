@@ -138,10 +138,12 @@ func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error 
 // that sites use to block a controlled browser. A plain Chrome even reports
 // navigator.webdriver === false natively, with no patch needed.
 //
-// The tradeoff: overrides that require a live CDP session (geolocation) or an
-// injected page script (the canvas/WebGL/JS fingerprint patches) do not apply
-// here — see CleanModeDropped. Timezone still applies via the TZ environment
-// variable, and user-agent, proxy, window size, and language via flags.
+// The tradeoff: overrides that require a live CDP session (platform,
+// accept-language, geolocation, screen metrics) or an injected page script (the
+// canvas/WebGL/JS fingerprint patches) do not apply here — see CleanModeDropped,
+// which the callers surface as a heads-up. Timezone still applies via the TZ
+// environment variable, and user-agent, proxy, window size, and the primary
+// language via flags.
 func launchClean(ctx context.Context, o Options, execPath, proxyArg string) error {
 	// execPath is the operator-configured browser binary and the args are derived
 	// from the user's own profile, so this is not untrusted input.

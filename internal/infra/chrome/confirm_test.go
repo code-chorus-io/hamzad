@@ -24,7 +24,7 @@ func TestExpectedConfigOmitsUnsetFields(t *testing.T) {
 	if got := exp["webdriver"]; got != "false" {
 		t.Errorf("webdriver = %q, want false", got)
 	}
-	for _, key := range []string{"screen", "hardwareConcurrency", "deviceMemory", geolocationKey, "proxy"} {
+	for _, key := range []string{"screen", hardwareConcurrencyKey, deviceMemoryKey, geolocationKey, "proxy"} {
 		if v, ok := exp[key]; ok && v != "" {
 			t.Errorf("unset field %q leaked value %q", key, v)
 		}
