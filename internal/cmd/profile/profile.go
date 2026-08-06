@@ -82,6 +82,11 @@ func fingerprintFlags() []cli.Flag {
 		&cli.StringFlag{Name: "webgl-vendor", Usage: "WebGL UNMASKED_VENDOR override"},
 		&cli.StringFlag{Name: "webgl-renderer", Usage: "WebGL UNMASKED_RENDERER override"},
 		&cli.BoolFlag{Name: "canvas-noise", Usage: "add per-profile canvas readback noise"},
+		&cli.StringFlag{
+			Name: "webrtc-mode",
+			Usage: "WebRTC IP handling: disable_non_proxied_udp (default with a proxy), " +
+				"default_public_interface_only, default_public_and_private_interfaces, default",
+		},
 	}
 }
 
@@ -102,6 +107,7 @@ func applyFlags(p *domain.Profile, cmd *cli.Command) error {
 	fp.WebGLVendor = cmd.String("webgl-vendor")
 	fp.WebGLRenderer = cmd.String("webgl-renderer")
 	fp.CanvasNoise = cmd.Bool("canvas-noise")
+	fp.WebRTCMode = cmd.String("webrtc-mode")
 
 	if s := cmd.String("screen"); s != "" {
 		w, h, err := parseScreen(s)

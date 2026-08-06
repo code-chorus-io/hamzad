@@ -199,6 +199,11 @@ func cleanArgs(o Options, proxyArg string) []string {
 	if langs := o.Fingerprint.Languages; len(langs) > 0 {
 		args = append(args, "--lang="+langs[0])
 	}
+	// A command-line flag, so unlike the CDP overrides this one survives the
+	// clean launch — which matters, because it is the leak that matters most.
+	if policy := webRTCPolicy(o); policy != "" {
+		args = append(args, "--webrtc-ip-handling-policy="+policy)
+	}
 
 	return append(args, startURL(o))
 }
@@ -270,6 +275,9 @@ func execOptions(o Options, execPath, proxyArg string) []chromedp.ExecAllocatorO
 	}
 	if langs := o.Fingerprint.Languages; len(langs) > 0 {
 		opts = append(opts, chromedp.Flag("lang", langs[0]))
+	}
+	if policy := webRTCPolicy(o); policy != "" {
+		opts = append(opts, chromedp.Flag("webrtc-ip-handling-policy", policy))
 	}
 	if o.DebugPort > 0 {
 		opts = append(opts, chromedp.Flag("remote-debugging-port", strconv.Itoa(o.DebugPort)))

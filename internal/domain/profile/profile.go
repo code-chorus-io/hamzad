@@ -10,6 +10,21 @@ import (
 	"time"
 )
 
+// ErrInvalidWebRTCMode is returned for a WebRTC policy Chrome does not accept.
+// Chrome ignores an unknown value in silence, which would leave the profile
+// leaking while its config claims otherwise — so it is rejected up front.
+var ErrInvalidWebRTCMode = errors.New(
+	"invalid webrtc mode (want disable_non_proxied_udp, default_public_interface_only, " +
+		"default_public_and_private_interfaces or default)")
+
+// webRTCModes are the policies Chrome accepts for --webrtc-ip-handling-policy.
+var webRTCModes = map[string]struct{}{
+	"default":                               {},
+	"default_public_interface_only":         {},
+	"default_public_and_private_interfaces": {},
+	"disable_non_proxied_udp":               {},
+}
+
 // ErrInvalidName is returned when a profile name is empty or malformed.
 var ErrInvalidName = errors.New("invalid profile name")
 
@@ -83,6 +98,12 @@ func (p Profile) Validate() error {
 	if p.Proxy != "" {
 		if _, err := ParseProxy(p.Proxy); err != nil {
 			return err
+		}
+	}
+
+	if m := p.Fingerprint.WebRTCMode; m != "" {
+		if _, ok := webRTCModes[m]; !ok {
+			return fmt.Errorf("%w: %q", ErrInvalidWebRTCMode, m)
 		}
 	}
 
