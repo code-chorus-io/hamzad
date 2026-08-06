@@ -9,8 +9,8 @@ require (
 	filippo.io/age v1.3.1
 	github.com/BurntSushi/toml v1.6.0
 	github.com/carlmjohnson/versioninfo v0.22.5
-	github.com/chromedp/cdproto v0.0.0-20260704091341-6ca7914c3938
-	github.com/chromedp/chromedp v0.15.1
+	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
+	github.com/chromedp/chromedp v0.16.0
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.1
