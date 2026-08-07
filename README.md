@@ -150,7 +150,8 @@ The default **clean** launch can only use process-level flags and environment. E
 | Accept-Language / locale | CDP `setUserAgentOverride` / `setLocaleOverride` | ❌ | ✅ |
 | Geolocation | CDP `setGeolocationOverride` + permission grant | ❌ | ✅ |
 | `screen.width/height` | CDP `setDeviceMetricsOverride` + injected JS | ❌ | ✅ |
-| hardwareConcurrency / deviceMemory / languages | injected JS (`defineProperty`) | ❌ | best-effort, detectable |
+| `hardwareConcurrency` | CDP `setHardwareConcurrencyOverride` | ❌ | ✅ (engine-level, reaches Workers) |
+| deviceMemory / languages | injected JS (`defineProperty`) | ❌ | best-effort, detectable |
 | Canvas noise / WebGL vendor-renderer | injected JS hooks | ❌ | best-effort, detectable |
 
 Mind the ❌ on `navigator.platform`: an operating-system preset sets the platform and the user-agent together, and a clean launch applies only the user-agent — so a Windows profile on a Linux host advertises a Windows UA with a Linux `navigator.platform`, which is a *sharper* signal than not spoofing at all. Use `--cdp-port` when the profile pins a platform, or leave the platform unset. `profile open` and the TUI both name the overrides they had to drop.
@@ -161,7 +162,11 @@ For high-scrutiny targets the JS-patched signals need a patched Chromium (GoLogi
 
 A profile with a proxy defaults to `disable_non_proxied_udp`, because WebRTC otherwise speaks STUN over UDP straight from the host's interfaces — around the proxy entirely — and hands any page the real address while every other signal insists otherwise. That mismatch is worse than not proxying at all. A profile without a proxy keeps Chrome's default so video calls still work; override either with `--webrtc-mode`. New profiles open with browserleaks.com/ip and /webrtc bookmarked, so the claim is one click from being checked.
 
-Two known leaks in the current spoofing, both inherent to patching from JavaScript rather than in the engine. The injected patches run only in the page's main world, so reading `navigator.hardwareConcurrency` or `deviceMemory` inside a `Worker` returns the real host values — a standard check. And the `--cdp-port` path enables the CDP `Runtime` domain, which is itself a signal some anti-bot services probe for. The CDP-native overrides (user-agent, timezone, geolocation, device metrics) are engine-level and have neither problem.
+Two known leaks remain, both stated plainly because they are the difference between "spoofed" and "unnoticed".
+
+**`deviceMemory` inside a Worker.** Injected patches run only in the page's main JS world, and a `Worker` gets a fresh one — so `navigator.deviceMemory` there reports the host's real value while the page claims otherwise. The mismatch is the tell, not the number. `hardwareConcurrency` used to leak the same way and no longer does: it moved to CDP's `setHardwareConcurrencyOverride`, which the engine applies everywhere. There is no equivalent for `deviceMemory`, so closing it needs either a patched Chromium or intercepting worker construction, both of which carry their own tells.
+
+**The CDP `Runtime` domain.** Under `--cdp-port`, [chromedp](https://github.com/chromedp/chromedp) calls `Runtime.enable` unconditionally while attaching (`chromedp.go:445`, used to tell a worker target from a page). Anti-bot services probe for exactly that. It cannot be switched off through chromedp's API — avoiding it means driving CDP directly instead. The default clean launch has neither this nor an open debug port, which is why it is the default.
 
 Canvas noise is a single fixed pattern rather than a per-profile one: it hides a profile's canvas from the host's own fingerprint, but two noised profiles still hash alike, so it does not defeat cross-profile linking.
 

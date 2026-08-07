@@ -372,5 +372,12 @@ func environmentActions(o Options) []chromedp.Action {
 		acts = append(acts, emulation.SetDeviceMetricsOverride(int64(w), int64(h), 1, false))
 	}
 
+	// Engine-level, so unlike a defineProperty patch it also holds inside a
+	// Worker — where a fingerprinter looks precisely because injected scripts
+	// never reached there.
+	if n := o.Fingerprint.HardwareConcurrent; n > 0 {
+		acts = append(acts, emulation.SetHardwareConcurrencyOverride(int64(n)))
+	}
+
 	return acts
 }

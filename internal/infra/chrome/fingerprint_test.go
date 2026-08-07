@@ -108,3 +108,39 @@ func TestPatchScriptOmitsUnrequestedPatches(t *testing.T) {
 		}
 	}
 }
+
+// TestHardwareConcurrencyIsNotAPageWorldPatch pins the Worker fix. A
+// defineProperty on navigator only exists in the page's own JS world, so a
+// fingerprinter that reads navigator.hardwareConcurrency inside a Worker got
+// the host's real core count while everything else claimed otherwise — the
+// mismatch being the tell, not the number. It is set through CDP's
+// Emulation.setHardwareConcurrencyOverride instead, which the engine applies
+// everywhere, so it must no longer appear in the injected script at all.
+func TestHardwareConcurrencyIsNotAPageWorldPatch(t *testing.T) {
+	t.Parallel()
+
+	script := patchScript(profile.Fingerprint{HardwareConcurrent: 12, DeviceMemory: 16})
+
+	if strings.Contains(script, hardwareConcurrencyKey) {
+		t.Error("hardwareConcurrency must be an engine override, not an injected patch")
+	}
+	// deviceMemory has no CDP equivalent, so it is still a page-world patch.
+	// Asserted so that the day one appears, this test says where to change.
+	if !strings.Contains(script, deviceMemoryKey) {
+		t.Error("deviceMemory is expected to remain an injected patch until CDP offers an override")
+	}
+}
+
+// TestHardwareConcurrencyReachesTheCDPActions checks the override is actually
+// issued, since removing the JS patch without adding it would be a regression
+// dressed as a fix.
+func TestHardwareConcurrencyReachesTheCDPActions(t *testing.T) {
+	t.Parallel()
+
+	withCPU := buildActions(Options{Fingerprint: profile.Fingerprint{HardwareConcurrent: 12}})
+	without := buildActions(Options{})
+
+	if len(withCPU) <= len(without) {
+		t.Errorf("pinning hardwareConcurrency added no CDP action (%d vs %d)", len(withCPU), len(without))
+	}
+}

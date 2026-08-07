@@ -21,9 +21,12 @@ func patchScript(fp profile.Fingerprint) string {
 	// sign-in block). A real, non-automated Chrome reports false.
 	parts := []string{defineNavigator("webdriver", false)}
 
-	if fp.HardwareConcurrent > 0 {
-		parts = append(parts, defineNavigator("hardwareConcurrency", fp.HardwareConcurrent))
-	}
+	// hardwareConcurrency is deliberately absent: it is set through CDP's
+	// Emulation.setHardwareConcurrencyOverride instead. That reaches Workers,
+	// which this script cannot, and it leaves one less patched getter for
+	// Function.prototype.toString to find.
+	// deviceMemory has no CDP equivalent, so it stays a page-world patch and
+	// still reads the host value inside a Worker. Known gap, not an oversight.
 	if fp.DeviceMemory > 0 {
 		parts = append(parts, defineNavigator("deviceMemory", fp.DeviceMemory))
 	}
