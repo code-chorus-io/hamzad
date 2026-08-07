@@ -137,10 +137,14 @@ func TestHardwareConcurrencyIsNotAPageWorldPatch(t *testing.T) {
 func TestHardwareConcurrencyReachesTheCDPActions(t *testing.T) {
 	t.Parallel()
 
-	withCPU := buildActions(Options{Fingerprint: profile.Fingerprint{HardwareConcurrent: 12}})
-	without := buildActions(Options{})
+	var found bool
+	for _, c := range overrides(Options{Fingerprint: profile.Fingerprint{HardwareConcurrent: 12}}) {
+		if c.method == "Emulation.setHardwareConcurrencyOverride" {
+			found = true
+		}
+	}
 
-	if len(withCPU) <= len(without) {
-		t.Errorf("pinning hardwareConcurrency added no CDP action (%d vs %d)", len(withCPU), len(without))
+	if !found {
+		t.Error("pinning hardwareConcurrency issued no engine override")
 	}
 }

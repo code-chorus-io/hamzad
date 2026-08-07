@@ -12,12 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strconv"
-
-	"github.com/chromedp/cdproto/browser"
-	"github.com/chromedp/cdproto/emulation"
-	"github.com/chromedp/cdproto/page"
-	"github.com/chromedp/chromedp"
 
 	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
@@ -125,27 +119,6 @@ func Launch(ctx context.Context, o Options) error {
 	}
 
 	return launchClean(ctx, o, execPath, proxyArg)
-}
-
-// launchCDP drives Chrome over the DevTools Protocol via chromedp, applying the
-// full override stack (including geolocation and the injected fingerprint
-// patches). It opens a remote-debugging port, so it is used only when the caller
-// explicitly asks for one with --cdp-port for automation to attach.
-func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error {
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, execOptions(o, execPath, proxyArg)...)
-	defer cancelAlloc()
-
-	taskCtx, cancel := chromedp.NewContext(allocCtx)
-	defer cancel()
-
-	if err := chromedp.Run(taskCtx, buildActions(o)...); err != nil {
-		return fmt.Errorf("launching chrome: %w", err)
-	}
-
-	// Block until the browser window is closed or the caller cancels.
-	<-taskCtx.Done()
-
-	return nil
 }
 
 // launchClean starts Chrome as an ordinary child process with only command-line
@@ -257,127 +230,4 @@ func clearSingletonLocks(dir string) {
 		// is deliberately ignored rather than aborting the launch.
 		_ = os.Remove(filepath.Join(dir, name))
 	}
-}
-
-// execOptions assembles the process-level launch flags for the browser. proxyArg
-// is the pre-resolved --proxy-server value (possibly a local auth relay), empty
-// when the profile has no proxy.
-func execOptions(o Options, execPath, proxyArg string) []chromedp.ExecAllocatorOption {
-	opts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
-	opts = append(opts,
-		chromedp.ExecPath(execPath),
-		chromedp.Flag("headless", false),
-		chromedp.UserDataDir(o.UserDataDir),
-		// Drop the "controlled by automated software" infobar chromedp sets by
-		// default. navigator.webdriver is neutralized in JS instead (see
-		// webdriverPatch) to avoid the "unsupported command-line flag" banner
-		// that --disable-blink-features would raise.
-		chromedp.Flag("enable-automation", false),
-		// chromedp mutes audio by default; a real browsing session should play it.
-		chromedp.Flag("mute-audio", false),
-	)
-	if ua := o.Fingerprint.UserAgent; ua != "" {
-		opts = append(opts, chromedp.UserAgent(ua))
-	}
-	if proxyArg != "" {
-		opts = append(opts, chromedp.ProxyServer(proxyArg))
-	}
-	if w, h := o.Fingerprint.ScreenWidth, o.Fingerprint.ScreenHeight; w > 0 && h > 0 {
-		opts = append(opts, chromedp.WindowSize(w, h))
-	}
-	if langs := o.Fingerprint.Languages; len(langs) > 0 {
-		opts = append(opts, chromedp.Flag("lang", langs[0]))
-	}
-	if policy := webRTCPolicy(o); policy != "" {
-		opts = append(opts, chromedp.Flag("webrtc-ip-handling-policy", policy))
-	}
-	if o.DebugPort > 0 {
-		opts = append(opts, chromedp.Flag("remote-debugging-port", strconv.Itoa(o.DebugPort)))
-	}
-
-	return opts
-}
-
-// buildActions assembles the CDP actions that apply the profile overrides
-// before the first navigation. Proxy authentication is handled out-of-band by
-// the local relay (see proxyForLaunch), so no Fetch auth interception is needed.
-func buildActions(o Options) []chromedp.Action {
-	var acts []chromedp.Action
-
-	acts = append(acts, identityActions(o.Fingerprint)...)
-	acts = append(acts, environmentActions(o)...)
-
-	if script := patchScript(o.Fingerprint); script != "" {
-		acts = append(acts, chromedp.ActionFunc(func(ctx context.Context) error {
-			if _, err := page.AddScriptToEvaluateOnNewDocument(script).Do(ctx); err != nil {
-				return fmt.Errorf("installing fingerprint patch: %w", err)
-			}
-
-			return nil
-		}))
-	}
-
-	return append(acts, chromedp.Navigate(startURL(o)))
-}
-
-// identityActions applies the who-am-I overrides: user-agent, its UA-CH
-// platform/language hints, and the JS locale.
-func identityActions(fp profile.Fingerprint) []chromedp.Action {
-	var acts []chromedp.Action
-
-	if fp.UserAgent != "" {
-		ua := emulation.SetUserAgentOverride(fp.UserAgent)
-		if fp.AcceptLanguage != "" {
-			ua = ua.WithAcceptLanguage(fp.AcceptLanguage)
-		}
-		if fp.Platform != "" {
-			ua = ua.WithPlatform(fp.Platform)
-		}
-		acts = append(acts, ua)
-	}
-
-	if len(fp.Languages) > 0 {
-		acts = append(acts, emulation.SetLocaleOverride().WithLocale(fp.Languages[0]))
-	}
-
-	return acts
-}
-
-// environmentActions applies the where-am-I overrides: timezone, geolocation
-// (with its permission grant), and screen metrics.
-func environmentActions(o Options) []chromedp.Action {
-	var acts []chromedp.Action
-
-	if o.Timezone != "" {
-		acts = append(acts, emulation.SetTimezoneOverride(o.Timezone))
-	}
-
-	if g := o.Fingerprint.Geolocation; g != nil {
-		acc := g.Accuracy
-		if acc == 0 {
-			acc = 100
-		}
-		// Grant the permission first so getCurrentPosition resolves instead of
-		// prompting, then install the coordinate override.
-		acts = append(acts,
-			browser.SetPermission(&browser.PermissionDescriptor{Name: geolocationKey}, browser.PermissionSettingGranted),
-			emulation.SetGeolocationOverride().
-				WithLatitude(g.Latitude).
-				WithLongitude(g.Longitude).
-				WithAccuracy(acc),
-		)
-	}
-
-	if w, h := o.Fingerprint.ScreenWidth, o.Fingerprint.ScreenHeight; w > 0 && h > 0 {
-		acts = append(acts, emulation.SetDeviceMetricsOverride(int64(w), int64(h), 1, false))
-	}
-
-	// Engine-level, so unlike a defineProperty patch it also holds inside a
-	// Worker — where a fingerprinter looks precisely because injected scripts
-	// never reached there.
-	if n := o.Fingerprint.HardwareConcurrent; n > 0 {
-		acts = append(acts, emulation.SetHardwareConcurrencyOverride(int64(n)))
-	}
-
-	return acts
 }
