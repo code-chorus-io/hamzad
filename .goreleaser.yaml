@@ -15,6 +15,12 @@ builds:
     # release archives are pulled onto machines we know nothing about.
     env:
       - CGO_ENABLED=0
+    # QUIC and WireGuard protocols sit behind sing-box build tags. Without them
+    # hysteria2, tuic and wireguard outbounds compile fine and then fail at
+    # launch with "unknown outbound type", which is a bad way to find out.
+    tags:
+      - with_quic
+      - with_wireguard
     flags:
       - -trimpath
     # No -X for the version: the CLI reports versioninfo.Short(), which reads

@@ -3,7 +3,7 @@ default:
 
 build:
     @echo 'building koochooloologin'
-    go build -o koochooloologin ./cmd/koochooloologin
+    go build -tags with_quic,with_wireguard -o koochooloologin ./cmd/koochooloologin
 
 run *ARGS:
     go run ./cmd/koochooloologin {{ ARGS }}

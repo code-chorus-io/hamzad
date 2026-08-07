@@ -60,7 +60,22 @@ koochooloologin profile show work
 koochooloologin profile remove work --purge
 ```
 
-`profile geo` and `--auto-geo` ask [ipwho.is](https://ipwho.is) over HTTPS, from behind the profile's own proxy. TLS matters here: the question travels through the very proxy being measured, so over plain HTTP its operator could choose the answer the profile then pins. The lookup routes through `http`, `https`, and `socks5` proxies; `socks4` is refused up front because Go's HTTP client cannot dial it — Chrome still uses such a proxy fine, so set the timezone by hand.
+`profile geo` and `--auto-geo` ask [ipwho.is](https://ipwho.is) over HTTPS, from behind the profile's own proxy. TLS matters here: the question travels through the very proxy being measured, so over plain HTTP its operator could choose the answer the profile then pins. The lookup egresses through the same relay Chrome uses, so it measures the exit of whatever protocol the profile actually speaks.
+
+## Proxies
+
+A profile's proxy is one string, encrypted in the store. It can be a **share link** — the thing a provider hands you — or a **raw [sing-box](https://sing-box.sagernet.org) outbound JSON object** for anything a link cannot express.
+
+```sh
+koochooloologin profile add a --proxy 'socks5://user:pass@1.2.3.4:1080'
+koochooloologin profile add b --proxy 'vless://UUID@host:443?security=reality&pbk=KEY&sid=01ab&fp=chrome&sni=www.apple.com'
+koochooloologin profile add c --proxy 'trojan://password@host:443?sni=cdn.example.com'
+koochooloologin profile add d --proxy '{"type":"hysteria2","server":"h.example.com","server_port":443,"password":"pw","tls":{"enabled":true}}'
+```
+
+Share links are parsed for `socks5`/`socks4`/`http`/`https`, `vless`, `trojan` and `ss`; everything else sing-box supports — hysteria2, tuic, wireguard, shadowtls, anytls, ssh — goes in as a raw outbound object. That escape hatch is also how you reach options no link can carry: multiplex, fragment, custom dialers.
+
+Whatever the protocol, Chrome only ever sees an unauthenticated HTTP proxy on loopback. Chrome cannot authenticate a proxy from the command line and cannot speak SOCKS auth at all, so sing-box runs the real handshake behind that listener. A share link's `fp=chrome` is honoured: the TLS ClientHello is made to look like Chrome's, which matters as much as the address does.
 
 ## Sharing profiles (git + age encryption)
 
@@ -107,6 +122,7 @@ The default **clean** launch can only use process-level flags and environment. E
 | Signal | Mechanism | Clean (default) | `--cdp-port` |
 | --- | --- | --- | --- |
 | Profile isolation | separate `--user-data-dir` | ✅ | ✅ |
+| WebRTC IP leak | `--webrtc-ip-handling-policy` | ✅ | ✅ |
 | Proxy (HTTP/SOCKS) + auth | `--proxy-server` + local auth relay | ✅ | ✅ |
 | User-Agent | `--user-agent` / CDP `setUserAgentOverride` | ✅ | ✅ |
 | Timezone | `TZ` env / CDP `setTimezoneOverride` | ✅ | ✅ (engine-native) |
@@ -124,6 +140,8 @@ Mind the ❌ on `navigator.platform`: an operating-system preset sets the platfo
 The default landing page reports every configured value beside the one the browser actually hands to page JavaScript, so a launch can be verified at a glance.
 
 For high-scrutiny targets the JS-patched signals need a patched Chromium (GoLogin's "Orbita"); the launch layer is designed so such a binary can be swapped in via `--chrome-path` without changing the CLI.
+
+A profile with a proxy defaults to `disable_non_proxied_udp`, because WebRTC otherwise speaks STUN over UDP straight from the host's interfaces — around the proxy entirely — and hands any page the real address while every other signal insists otherwise. That mismatch is worse than not proxying at all. A profile without a proxy keeps Chrome's default so video calls still work; override either with `--webrtc-mode`. New profiles open with browserleaks.com/ip and /webrtc bookmarked, so the claim is one click from being checked.
 
 Two known leaks in the current spoofing, both inherent to patching from JavaScript rather than in the engine. The injected patches run only in the page's main world, so reading `navigator.hardwareConcurrency` or `deviceMemory` inside a `Worker` returns the real host values — a standard check. And the `--cdp-port` path enables the CDP `Runtime` domain, which is itself a signal some anti-bot services probe for. The CDP-native overrides (user-agent, timezone, geolocation, device metrics) are engine-level and have neither problem.
 
