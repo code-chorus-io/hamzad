@@ -26,9 +26,11 @@ const endpointTimeout = 30 * time.Second
 // overrides assembles the CDP commands that dress a profile, in the order they
 // must be applied: identity before environment, patches before navigation.
 //
-// Every command here is deliberate. Nothing enables a domain — no Runtime, no
-// Network, no Log — because each one changes observable behaviour in the page,
-// and Runtime.enable in particular is a signal anti-bot services look for.
+// Every command here is deliberate. The only domain enabled is Page, and only
+// because addScriptToEvaluateOnNewDocument silently does nothing without it —
+// it returns a script identifier and then never runs the script. Runtime,
+// Network and Log stay off: each changes observable behaviour in the page, and
+// Runtime.enable in particular is a signal anti-bot services look for.
 func overrides(o Options) []command {
 	fp := o.Fingerprint
 	cmds := identityOverrides(fp)
@@ -38,8 +40,9 @@ func overrides(o Options) []command {
 	// world has its own globals, so a defineProperty there would be invisible
 	// to the page scripts it is meant to fool.
 	if script := patchScript(fp); script != "" {
-		cmds = append(cmds, command{"Page.addScriptToEvaluateOnNewDocument",
-			map[string]any{"source": script}})
+		cmds = append(cmds,
+			command{"Page.enable", nil},
+			command{"Page.addScriptToEvaluateOnNewDocument", map[string]any{"source": script}})
 	}
 
 	return append(cmds, command{"Page.navigate", map[string]any{keyURL: startURL(o)}})
@@ -109,7 +112,7 @@ type command struct {
 }
 
 // launchCDP starts Chrome with a debugging port and drives it over the protocol
-// directly, rather than through chromedp.
+// directly, rather than through a general-purpose driver library.
 //
 // The browser is started the same way the clean path starts it — an ordinary
 // child process — so the only difference between the two launches is the
@@ -127,13 +130,20 @@ func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error 
 		return fmt.Errorf("starting chrome: %w", err)
 	}
 
-	if err := applyOverrides(ctx, o); err != nil {
+	client, err := applyOverrides(ctx, o)
+	if err != nil {
 		return err
 	}
+	// Every Emulation.* override is scoped to the DevTools session that set it,
+	// and the injected script is dropped with it: Chrome reverts the lot the
+	// moment the connection closes. So the session is held open for as long as
+	// the browser runs, not just long enough to send the commands.
+	defer func() { _ = client.Close() }()
 
-	err := cmd.Wait()
+	err = cmd.Wait()
+	// A ctx-cancel kill is how a session normally ends, not a failure.
 	if ctx.Err() != nil {
-		return nil //nolint:nilerr // a ctx-cancel kill is how a session normally ends
+		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("chrome exited: %w", err)
@@ -142,32 +152,77 @@ func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error 
 	return nil
 }
 
-// applyOverrides connects to the freshly started browser and dresses the page.
-func applyOverrides(ctx context.Context, o Options) error {
+// applyOverrides connects to the freshly started browser and dresses the page,
+// returning the still-open client. The caller owns it and must keep it open for
+// the browser's lifetime — closing it reverts every override.
+func applyOverrides(ctx context.Context, o Options) (*cdp.Client, error) {
 	wsURL, err := waitForEndpoint(ctx, o.DebugPort)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	client, err := cdp.Dial(ctx, wsURL)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer func() { _ = client.Close() }()
 
 	if err := client.AttachToPage(ctx); err != nil {
-		return err
+		_ = client.Close()
+
+		return nil, err
+	}
+
+	if err := backfillUserAgent(ctx, client, &o); err != nil {
+		_ = client.Close()
+
+		return nil, err
 	}
 
 	for _, c := range overrides(o) {
 		if _, err := client.Send(ctx, c.method, c.params); err != nil {
-			return err
+			_ = client.Close()
+
+			return nil, err
 		}
 	}
 
-	fmt.Printf("CDP ready — attach automation to:\n  %s\n", wsURL)
+	return client, nil
+}
+
+// backfillUserAgent fills in the user-agent a profile did not pin but still
+// needs, because Emulation.setUserAgentOverride is the only way to set
+// navigator.platform and Accept-Language and it requires a user-agent. Without
+// this a profile that pins a platform and no user-agent silently gets neither,
+// while the confirmation page goes on claiming the platform applied.
+//
+// The browser's own user-agent is used, so the override changes nothing the
+// page can see beyond the platform and language it was asked for.
+func backfillUserAgent(ctx context.Context, client *cdp.Client, o *Options) error {
+	fp := &o.Fingerprint
+	if !needsUserAgentBackfill(*fp) {
+		return nil
+	}
+
+	raw, err := client.Send(ctx, "Browser.getVersion", nil)
+	if err != nil {
+		return err
+	}
+
+	var version struct {
+		UserAgent string `json:"userAgent"`
+	}
+	if err := json.Unmarshal(raw, &version); err != nil {
+		return fmt.Errorf("decoding browser version: %w", err)
+	}
+	fp.UserAgent = version.UserAgent
 
 	return nil
+}
+
+// needsUserAgentBackfill reports whether a fingerprint pins something that only
+// setUserAgentOverride can carry, but no user-agent to carry it on.
+func needsUserAgentBackfill(fp profile.Fingerprint) bool {
+	return fp.UserAgent == "" && (fp.Platform != "" || fp.AcceptLanguage != "")
 }
 
 // waitForEndpoint polls Chrome's /json/version until it publishes a websocket

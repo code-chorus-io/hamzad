@@ -1,11 +1,12 @@
 // Package cdp is a minimal DevTools Protocol client, written to leave fewer
 // traces than a general-purpose one.
 //
-// It exists for a single reason: chromedp calls Runtime.enable unconditionally
-// while attaching to a target, and anti-bot services probe for exactly that.
-// The call is load-bearing inside chromedp — it uses it to tell a worker target
-// from a page — and cannot be switched off through its API, so the only way to
-// avoid it is to speak the protocol directly.
+// It exists for a single reason: general-purpose drivers (chromedp among them)
+// call Runtime.enable unconditionally while attaching to a target, and anti-bot
+// services probe for exactly that. The call is load-bearing inside them — it is
+// how they tell a worker target from a page — and cannot be switched off
+// through their APIs, so the only way to avoid it is to speak the protocol
+// directly.
 //
 // What that costs: no action pipeline, no automatic domain enabling, no target
 // lifecycle management. This client sends commands and reads their replies.
@@ -177,9 +178,13 @@ func (c *Client) Send(ctx context.Context, method string, params any) (json.RawM
 // later command to it.
 //
 // flatten:true keeps the session on this one connection, so no second socket is
-// opened. Notably absent afterwards: Runtime.enable. chromedp issues it here to
-// discover whether the target is a worker; we already know it is a page,
-// because that is what we asked for.
+// opened. Notably absent afterwards: Runtime.enable. A general-purpose driver
+// issues it here to discover whether the target is a worker; we already know it
+// is a page, because that is what we asked for.
+//
+// The session returned lives as long as this client. Callers must keep it open
+// for as long as they want their overrides to hold — Chrome reverts every
+// Emulation.* override and drops injected scripts when the session detaches.
 func (c *Client) AttachToPage(ctx context.Context) error {
 	raw, err := c.Send(ctx, "Target.getTargets", nil)
 	if err != nil {
