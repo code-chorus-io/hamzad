@@ -104,10 +104,12 @@ The store is a git repository. Secrets and session state are **encrypted with [a
 | `profiles.toml` | yes, plaintext | non-secret config: fingerprint, timezone, notes |
 | `recipients.txt` | yes, plaintext | age/SSH **public** keys allowed to decrypt |
 | `secrets/<name>.age` | yes, encrypted | the profile's proxy (incl. credentials) |
-| `data/<name>.tar.age` | yes, encrypted | full Chrome user-data-dir (cookies, storage) |
+| `data/<name>.tar.age` | yes, encrypted | Chrome user-data-dir minus caches (cookies, storage, logins) |
 | `data/<name>/` | **gitignored** | the local, unencrypted working copy |
 
 Encrypting needs only the **public** recipients, so `add`/`push` never touch your private key. Only **decrypting** — `open`, `pull`, `show --reveal` — uses your identity (`~/.ssh/id_ed25519` by default; override with `--identity`).
+
+The bundle deliberately leaves out Chrome's caches — `Cache`, `Code Cache`, `GPUCache`, the shader and Service-Worker caches. Chrome rebuilds them on next launch and none of them carries any part of the identity being shared, but they dominate a profile's size: a real signed-in profile measured 197 MB packed with them and 66 MB without. That matters because the bundle is encrypted, so it is incompressible and git cannot delta two revisions — every `profile push` commits the whole file again, against GitHub's 50 MB warning and 100 MB hard block. If a profile still outgrows the limit, put `data/*.age` behind [Git LFS](https://git-lfs.com).
 
 ```sh
 # init seeds recipients.txt with your ~/.ssh/id_ed25519.pub

@@ -226,12 +226,89 @@ func (s *Store) writeBundle(c crypt.Crypt, dst io.Writer, dir string) error {
 	return nil
 }
 
+// cacheDirs are the Chrome user-data subdirectories a bundle deliberately drops.
+//
+// They are pure caches: Chrome rebuilds every one of them on next launch, and
+// none carries a scrap of the identity a shared profile exists to move —
+// cookies, Local Storage, IndexedDB and Login Data all live elsewhere. Carrying
+// them is not free. The bundle is age-encrypted, so it is incompressible and
+// git cannot delta two revisions of it; every push writes the whole thing again.
+// A single signed-in profile measured 197 MB packed and 66 MB without these,
+// against GitHub's 50 MB warning and 100 MB hard limit — the difference between
+// a store that syncs for years and one that stops accepting pushes.
+//
+// Matched by path relative to the user-data-dir, with the profile directory
+// ("Default", "Profile 1", …) matched as a single leading component.
+var cacheDirs = []string{
+	"Cache",
+	"Code Cache",
+	"GPUCache",
+	"DawnGraphiteCache",
+	"DawnWebGPUCache",
+	"GraphiteDawnCache",
+	"ShaderCache",
+	"GrShaderCache",
+	"component_crx_cache",
+	"optimization_guide_model_store",
+	"optimization_guide_hint_cache_store",
+	filepath.Join("Service Worker", "CacheStorage"),
+	filepath.Join("Service Worker", "ScriptCache"),
+}
+
+// isCachePath reports whether rel — a path relative to the user-data-dir —
+// names one of the cache directories or anything inside one. Both the top level
+// ("GrShaderCache") and the per-profile level ("Default/Cache") are checked,
+// because Chrome uses both.
+//
+// Exactly one leading component is stripped, never more. Matching at any depth
+// would drop a directory that merely happens to be called "Cache" inside an
+// extension's own storage, which is data a profile may genuinely need.
+func isCachePath(rel string) bool {
+	if matchesCacheDir(rel) {
+		return true
+	}
+
+	// Strip the profile directory ("Default", "Profile 1", "System Profile")
+	// so "Default/Code Cache/js" matches "Code Cache".
+	if _, rest, found := strings.Cut(rel, string(filepath.Separator)); found {
+		return matchesCacheDir(rest)
+	}
+
+	return false
+}
+
+// matchesCacheDir reports whether rel is a cache directory or sits inside one.
+func matchesCacheDir(rel string) bool {
+	for _, c := range cacheDirs {
+		if rel == c || strings.HasPrefix(rel, c+string(filepath.Separator)) {
+			return true
+		}
+	}
+
+	return false
+}
+
 // tarDir writes the regular files, directories, and symlinks under root into tw
-// with paths relative to root. Irregular files (sockets, pipes) are skipped.
+// with paths relative to root. Irregular files (sockets, pipes) are skipped, as
+// are the cache directories named by cacheDirs.
 func tarDir(tw *tar.Writer, root string) error {
 	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
+		}
+
+		rel, relErr := filepath.Rel(root, path)
+		if relErr != nil {
+			return fmt.Errorf("relativizing %q: %w", path, relErr)
+		}
+		if isCachePath(rel) {
+			// Returning SkipDir prunes the whole subtree rather than walking
+			// into tens of thousands of cache entries only to drop each one.
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+
+			return nil
 		}
 
 		return tarEntry(tw, root, path, info)
