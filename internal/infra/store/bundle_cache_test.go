@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // TestPackBundleDropsCacheDirectories is a size guard, not a correctness one.
@@ -109,6 +111,30 @@ func TestPackBundleKeepsExtensionCacheDirectories(t *testing.T) {
 	}
 }
 
+// newBareRemote returns an empty bare repository standing in for a
+// freshly-created GitHub repo, plus a function that points its HEAD at whatever
+// branch the store actually pushed.
+//
+// The branch name is never assumed: `git init` defaults to "main" on a
+// developer's machine and "master" on older git, so hard-coding either makes the
+// test pass in one place and fail in the other.
+func newBareRemote(t *testing.T, st *store.Store) (string, func() string) {
+	t.Helper()
+
+	remote := t.TempDir()
+	runGit(t, remote, "init", "--bare", ".")
+	runGit(t, st.Dir, "remote", "add", "origin", remote)
+
+	adopt := func() string {
+		branch := runGit(t, st.Dir, "rev-parse", "--abbrev-ref", "HEAD")
+		runGit(t, remote, "symbolic-ref", "HEAD", "refs/heads/"+branch)
+
+		return branch
+	}
+
+	return remote, adopt
+}
+
 // TestSyncBootstrapsAnEmptyRemote covers the documented first-run sequence:
 // `store init --remote <fresh repo>` then `store sync`. Sync rebased before
 // pushing, and rebasing onto a repository with no commits fails outright with
@@ -122,9 +148,7 @@ func TestSyncBootstrapsAnEmptyRemote(t *testing.T) {
 
 	// A bare repository with no commits is exactly what `gh repo create` leaves
 	// behind, and what the old pull --rebase could not cope with.
-	remote := t.TempDir()
-	runGit(t, remote, "init", "--bare", "--initial-branch=main", ".")
-	runGit(t, st.Dir, "remote", "add", "origin", remote)
+	remote, adopt := newBareRemote(t, st)
 
 	if err := st.Sync(t.Context(), "first sync"); err != nil {
 		t.Fatalf("Sync onto an empty remote: %v", err)
@@ -132,7 +156,7 @@ func TestSyncBootstrapsAnEmptyRemote(t *testing.T) {
 
 	// The bundle and the profile must actually be on the remote, not merely
 	// committed locally with the push silently skipped.
-	out := runGit(t, remote, "ls-tree", "-r", "--name-only", "HEAD")
+	out := runGit(t, remote, "ls-tree", "-r", "--name-only", adopt())
 	for _, want := range []string{"profiles.toml", "recipients.txt", workBundlePath} {
 		if !slices.Contains(splitLines(out), want) {
 			t.Errorf("%q missing from the remote after the first sync; got %v", want, splitLines(out))
@@ -149,13 +173,12 @@ func TestSyncStillRebasesOnceTheRemoteHasCommits(t *testing.T) {
 	st, c := newSyncStore(t)
 	seedProfile(t, st, c, "work")
 
-	remote := t.TempDir()
-	runGit(t, remote, "init", "--bare", "--initial-branch=main", ".")
-	runGit(t, st.Dir, "remote", "add", "origin", remote)
+	remote, adopt := newBareRemote(t, st)
 
 	if err := st.Sync(t.Context(), "first"); err != nil {
 		t.Fatalf("first Sync: %v", err)
 	}
+	branch := adopt()
 
 	// A teammate's commit lands on the remote, then we sync again. If the pull
 	// were skipped the push would be rejected as non-fast-forward.
@@ -178,7 +201,7 @@ func TestSyncStillRebasesOnceTheRemoteHasCommits(t *testing.T) {
 		t.Fatalf("second Sync must rebase onto the teammate's commit: %v", err)
 	}
 
-	out := runGit(t, remote, "ls-tree", "-r", "--name-only", "HEAD")
+	out := runGit(t, remote, "ls-tree", "-r", "--name-only", branch)
 	for _, want := range []string{"notes.txt", "data/second.tar.age"} {
 		if !slices.Contains(splitLines(out), want) {
 			t.Errorf("%q missing after the second sync; got %v", want, splitLines(out))
