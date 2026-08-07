@@ -29,7 +29,7 @@ linters:
       # Our own internal packages already wrap their errors with context, so
       # re-wrapping at the command layer would just double the prefix.
       ignore-package-globs:
-        - github.com/1995parham/koochooloologin/*
+        - github.com/code-chorus-io/hamzad/*
       ignore-sigs:
         - .Errorf(
         - errors.New(

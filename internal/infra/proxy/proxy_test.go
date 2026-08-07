@@ -12,7 +12,7 @@ import (
 
 	"github.com/things-go/go-socks5"
 
-	"github.com/1995parham/koochooloologin/internal/infra/proxy"
+	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
 )
 
 // Shared fixtures, factored out so the table below reads as data rather than

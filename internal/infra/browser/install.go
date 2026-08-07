@@ -104,7 +104,7 @@ func readInstalled(version string) (Metadata, error) {
 // trust anchor is TLS to Google's bucket. Recording it gives later installs and
 // teammates a fixed digest to compare, which is the part that can be verified.
 func fetchAndExtract(ctx context.Context, build Build, dest string, progress func(done, total int64)) (string, error) {
-	archive, err := os.CreateTemp("", "koochooloologin-chrome-*.zip")
+	archive, err := os.CreateTemp("", "hamzad-chrome-*.zip")
 	if err != nil {
 		return "", fmt.Errorf("creating temp archive: %w", err)
 	}

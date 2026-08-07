@@ -7,7 +7,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/1995parham/koochooloologin/internal/infra/proxy"
+	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
 )
 
 // Signal keys shared between expectedConfig, CleanModeDropped, and the

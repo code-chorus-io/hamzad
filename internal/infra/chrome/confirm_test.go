@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 // TestExpectedConfigOmitsUnsetFields checks that a field the profile does not

@@ -1,4 +1,4 @@
-# koochooloologin
+# hamzad
 
 A small, GoLogin-style **anti-detect browser manager** on the command line. Each *profile* is an isolated Chrome identity with its own proxy, timezone, geolocation, and fingerprint. Profiles are stored in a git repository so you can **share** them with a teammate by pushing to a remote — while the browsing data (cookies, history) stays on your machine.
 
@@ -6,24 +6,24 @@ It drives an ordinary Chrome/Chromium — no patched browser. By default a profi
 
 ## Install
 
-Prebuilt static binaries for Linux, macOS, and Windows (amd64 and arm64) are attached to every [release](https://github.com/1995parham/koochooloologin/releases). Download the archive for your platform, check it against the release's `checksums.txt`, and put `koochooloologin` on your `PATH`.
+Prebuilt static binaries for Linux, macOS, and Windows (amd64 and arm64) are attached to every [release](https://github.com/code-chorus-io/hamzad/releases). Download the archive for your platform, check it against the release's `checksums.txt`, and put `hamzad` on your `PATH`.
 
 ```sh
-go install github.com/1995parham/koochooloologin/cmd/koochooloologin@latest
+go install github.com/code-chorus-io/hamzad/cmd/hamzad@latest
 # or, from a checkout:
-just build      # produces ./koochooloologin
+just build      # produces ./hamzad
 just snapshot   # builds the release archives into ./dist, publishing nothing
 ```
 
-You also need a browser. Either bring your own — auto-detected from `PATH`, or set `--chrome-path` / `chrome_path` — or let koochooloologin fetch one:
+You also need a browser. Either bring your own — auto-detected from `PATH`, or set `--chrome-path` / `chrome_path` — or let hamzad fetch one:
 
 ```sh
-koochooloologin browser install stable   # ~190 MB, Chrome for Testing
-koochooloologin browser list
-koochooloologin browser path             # which binary a launch would use
+hamzad browser install stable   # ~190 MB, Chrome for Testing
+hamzad browser list
+hamzad browser path             # which binary a launch would use
 ```
 
-Downloads go to `~/.cache/koochooloologin/browsers/<version>/` and never auto-update. Nothing is fetched implicitly: `profile open` will not pull a browser mid-command, it tells you which `browser install` to run.
+Downloads go to `~/.cache/hamzad/browsers/<version>/` and never auto-update. Nothing is fetched implicitly: `profile open` will not pull a browser mid-command, it tells you which `browser install` to run.
 
 Pinning a version with `chrome_version` is worth doing. A profile's user-agent is only convincing while it matches the engine actually rendering the page, and a teammate resuming a shared profile on their own Chrome is running a subtly different identity than the one you shared.
 
@@ -35,7 +35,7 @@ On Linux the archive carries no system libraries, so a minimal desktop or contai
 
 ```sh
 # create a profile with a proxy and timezone
-koochooloologin profile add work \
+hamzad profile add work \
   --proxy 'socks5://user:pass@1.2.3.4:1080' \
   --timezone Europe/Berlin \
   --screen 1920x1080 \
@@ -43,21 +43,21 @@ koochooloologin profile add work \
   --canvas-noise
 
 # auto-align timezone & geolocation to the proxy's exit IP, saved to the profile
-koochooloologin profile geo work
+hamzad profile geo work
 
 # launch it — an isolated Chrome window opens with the proxy + overrides applied
-koochooloologin profile open work
+hamzad profile open work
 
 # the geolocation saved above needs a CDP session to take effect; the timezone
 # applies either way. --cdp-port also exposes the port for automation to attach.
-koochooloologin profile open work --cdp-port 9222
+hamzad profile open work --cdp-port 9222
 
 # ...or derive geo for this session only, without saving it to the profile
-koochooloologin profile open work --auto-geo --cdp-port 9222
+hamzad profile open work --auto-geo --cdp-port 9222
 
-koochooloologin profile list
-koochooloologin profile show work
-koochooloologin profile remove work --purge
+hamzad profile list
+hamzad profile show work
+hamzad profile remove work --purge
 ```
 
 `profile geo` and `--auto-geo` ask [ipwho.is](https://ipwho.is) over HTTPS, from behind the profile's own proxy. TLS matters here: the question travels through the very proxy being measured, so over plain HTTP its operator could choose the answer the profile then pins. The lookup egresses through the same relay Chrome uses, so it measures the exit of whatever protocol the profile actually speaks.
@@ -67,10 +67,10 @@ koochooloologin profile remove work --purge
 A profile's proxy is one string, encrypted in the store. It can be a **share link** — the thing a provider hands you — or a **raw [sing-box](https://sing-box.sagernet.org) outbound JSON object** for anything a link cannot express.
 
 ```sh
-koochooloologin profile add a --proxy 'socks5://user:pass@1.2.3.4:1080'
-koochooloologin profile add b --proxy 'vless://UUID@host:443?security=reality&pbk=KEY&sid=01ab&fp=chrome&sni=www.apple.com'
-koochooloologin profile add c --proxy 'trojan://password@host:443?sni=cdn.example.com'
-koochooloologin profile add d --proxy '{"type":"hysteria2","server":"h.example.com","server_port":443,"password":"pw","tls":{"enabled":true}}'
+hamzad profile add a --proxy 'socks5://user:pass@1.2.3.4:1080'
+hamzad profile add b --proxy 'vless://UUID@host:443?security=reality&pbk=KEY&sid=01ab&fp=chrome&sni=www.apple.com'
+hamzad profile add c --proxy 'trojan://password@host:443?sni=cdn.example.com'
+hamzad profile add d --proxy '{"type":"hysteria2","server":"h.example.com","server_port":443,"password":"pw","tls":{"enabled":true}}'
 ```
 
 Share links are parsed for `socks5`/`socks4`/`http`/`https`, `vless`, `trojan` and `ss`; everything else sing-box supports — hysteria2, tuic, wireguard, shadowtls, anytls, ssh — goes in as a raw outbound object. That escape hatch is also how you reach options no link can carry: multiplex, fragment, custom dialers.
@@ -93,14 +93,14 @@ Encrypting needs only the **public** recipients, so `add`/`push` never touch you
 
 ```sh
 # init seeds recipients.txt with your ~/.ssh/id_ed25519.pub
-koochooloologin store init --remote git@github.com:you/profiles.git
+hamzad store init --remote git@github.com:you/profiles.git
 
 # add a teammate so they can decrypt (their SSH public key, or a file of keys)
-koochooloologin store recipients add 'ssh-ed25519 AAAA...teammate'
-koochooloologin store recipients list
+hamzad store recipients add 'ssh-ed25519 AAAA...teammate'
+hamzad store recipients list
 
-koochooloologin store sync -m "share work profile"   # commit + pull --rebase + push
-koochooloologin store status
+hamzad store sync -m "share work profile"   # commit + pull --rebase + push
+hamzad store status
 ```
 
 A teammate clones the repo, runs `store sync`, then `profile open work` — their copy decrypts the proxy and the session bundle and resumes the account.
@@ -149,7 +149,7 @@ Canvas noise is a single fixed pattern rather than a per-profile one: it hides a
 
 ## Configuration
 
-See [`configs/config.example.toml`](configs/config.example.toml). Every key is also settable via `KEL_`-prefixed environment variables (e.g. `KEL_STORE_DIR`).
+See [`configs/config.example.toml`](configs/config.example.toml). Every key is also settable via `HAMZAD_`-prefixed environment variables (e.g. `HAMZAD_STORE_DIR`).
 
 ## License
 

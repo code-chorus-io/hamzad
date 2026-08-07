@@ -4,7 +4,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 // TestWebRTCDefaultsClosedWhenProxied is the important one. WebRTC speaks STUN

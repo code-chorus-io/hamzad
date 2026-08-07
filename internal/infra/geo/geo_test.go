@@ -5,7 +5,7 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/infra/geo"
+	"github.com/code-chorus-io/hamzad/internal/infra/geo"
 )
 
 // TestLookupRejectsUndialableProxy covers the gap between what a profile may

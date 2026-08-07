@@ -10,10 +10,10 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/manager"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	domain "github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/manager"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // Shared key-press names, so the several switch statements over them stay in
@@ -253,7 +253,7 @@ func (m Model) View() tea.View {
 	return tea.View{
 		Content:     body,
 		AltScreen:   true,
-		WindowTitle: "koochooloologin",
+		WindowTitle: "hamzad",
 	}
 }
 
@@ -261,7 +261,7 @@ func (m Model) dashboardView() string {
 	help := helpStyle.Render(
 		"↑/↓ move  •  o/enter open  •  c close  •  a add profile  •  r reload  •  q quit")
 
-	view := titleStyle.Render("koochooloologin — sessions") + "\n\n" +
+	view := titleStyle.Render("hamzad — sessions") + "\n\n" +
 		m.table.View() + "\n\n" + help
 	if m.status != "" {
 		view += "\n" + statusStyle.Render(m.status)

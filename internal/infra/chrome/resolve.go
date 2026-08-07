@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/1995parham/koochooloologin/internal/infra/browser"
+	"github.com/code-chorus-io/hamzad/internal/infra/browser"
 )
 
 // ErrVersionNotInstalled is returned when a pinned browser version has not been

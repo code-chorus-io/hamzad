@@ -12,8 +12,8 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/1995parham/koochooloologin/internal/infra/config"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	"github.com/code-chorus-io/hamzad/internal/infra/config"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // errRecipientRequired is returned by `recipients add` with no arguments.

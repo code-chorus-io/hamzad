@@ -4,7 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
+	domain "github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 // chromeVersion is the Chrome major version stamped into the spoofed user-agent

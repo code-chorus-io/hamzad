@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 )
 
 // errPassphraseCancelled unblocks a waiting decrypt when the user dismisses the

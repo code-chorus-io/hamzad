@@ -1,4 +1,4 @@
-module github.com/1995parham/koochooloologin
+module github.com/code-chorus-io/hamzad
 
 go 1.26.5
 

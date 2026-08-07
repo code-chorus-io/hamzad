@@ -19,8 +19,8 @@ import (
 	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/proxy"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
 )
 
 // ErrNoBrowser is returned when no Chrome/Chromium executable can be located.

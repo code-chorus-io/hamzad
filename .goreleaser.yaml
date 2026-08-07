@@ -1,16 +1,16 @@
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: koochooloologin
+project_name: hamzad
 
 before:
   hooks:
     - go mod download
 
 builds:
-  - id: koochooloologin
-    main: ./cmd/koochooloologin
-    binary: koochooloologin
+  - id: hamzad
+    main: ./cmd/hamzad
+    binary: hamzad
     # A static binary runs on any glibc/musl host, which matters because the
     # release archives are pulled onto machines we know nothing about.
     env:
@@ -37,7 +37,7 @@ builds:
       - arm64
 
 archives:
-  - id: koochooloologin
+  - id: hamzad
     formats: [tar.gz]
     format_overrides:
       - goos: windows

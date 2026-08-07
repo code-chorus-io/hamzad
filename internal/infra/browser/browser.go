@@ -102,7 +102,7 @@ func CacheDir() (string, error) {
 		return "", fmt.Errorf("resolving cache dir: %w", err)
 	}
 
-	return filepath.Join(base, "koochooloologin", "browsers"), nil
+	return filepath.Join(base, "hamzad", "browsers"), nil
 }
 
 // versionDir is the install root for one version.

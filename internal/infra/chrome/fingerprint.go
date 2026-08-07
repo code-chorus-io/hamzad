@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 // patchScript builds the JavaScript injected via

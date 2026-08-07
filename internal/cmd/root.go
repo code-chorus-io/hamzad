@@ -1,4 +1,4 @@
-// Package cmd assembles the koochooloologin command tree and executes it.
+// Package cmd assembles the hamzad command tree and executes it.
 package cmd
 
 import (
@@ -9,22 +9,22 @@ import (
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/urfave/cli/v3"
 
-	browsercmd "github.com/1995parham/koochooloologin/internal/cmd/browser"
-	profilecmd "github.com/1995parham/koochooloologin/internal/cmd/profile"
-	storecmd "github.com/1995parham/koochooloologin/internal/cmd/store"
-	tuicmd "github.com/1995parham/koochooloologin/internal/cmd/tui"
-	"github.com/1995parham/koochooloologin/internal/infra/config"
+	browsercmd "github.com/code-chorus-io/hamzad/internal/cmd/browser"
+	profilecmd "github.com/code-chorus-io/hamzad/internal/cmd/profile"
+	storecmd "github.com/code-chorus-io/hamzad/internal/cmd/store"
+	tuicmd "github.com/code-chorus-io/hamzad/internal/cmd/tui"
+	"github.com/code-chorus-io/hamzad/internal/infra/config"
 )
 
 // Execute builds the root command and runs it against os.Args, exiting non-zero
 // on error.
 func Execute() {
 	root := &cli.Command{
-		Name:    "koochooloologin",
+		Name:    "hamzad",
 		Usage:   "manage, launch, and share Chrome profiles with per-profile proxy, timezone, and fingerprint",
 		Version: versioninfo.Short(),
-		Flags:  rootFlags(),
-		Before: loadConfig,
+		Flags:   rootFlags(),
+		Before:  loadConfig,
 		Commands: []*cli.Command{
 			profilecmd.Command(),
 			browsercmd.Command(),
@@ -39,7 +39,7 @@ func Execute() {
 	}
 }
 
-// rootFlags are the global settings, each also readable from a KEL_-prefixed
+// rootFlags are the global settings, each also readable from a HAMZAD_-prefixed
 // environment variable.
 func rootFlags() []cli.Flag {
 	return []cli.Flag{

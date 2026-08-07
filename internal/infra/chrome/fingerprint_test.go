@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 // sampledPixels is how many leading pixels the mask assertions scan. Any real

@@ -12,11 +12,11 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/urfave/cli/v3"
 
-	"github.com/1995parham/koochooloologin/internal/infra/chrome"
-	"github.com/1995parham/koochooloologin/internal/infra/config"
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/manager"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	"github.com/code-chorus-io/hamzad/internal/infra/chrome"
+	"github.com/code-chorus-io/hamzad/internal/infra/config"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/manager"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // Command returns the "tui" command.

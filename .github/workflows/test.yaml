@@ -42,4 +42,4 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
-      - run: go build -o koochooloologin ./cmd/koochooloologin
+      - run: go build -o hamzad ./cmd/hamzad

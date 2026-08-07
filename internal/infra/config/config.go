@@ -18,8 +18,8 @@ import (
 )
 
 // EnvPrefix is the prefix for environment-variable overrides, e.g.
-// KEL_STORE_DIR overrides store_dir. Nested keys use a double underscore.
-const EnvPrefix = "KEL_"
+// HAMZAD_STORE_DIR overrides store_dir. Nested keys use a double underscore.
+const EnvPrefix = "HAMZAD_"
 
 // Config holds the resolved application configuration.
 type Config struct {
@@ -54,10 +54,10 @@ func defaultIdentityPath() string {
 
 func defaultStoreDir() string {
 	if dir, err := os.UserConfigDir(); err == nil {
-		return filepath.Join(dir, "koochooloologin")
+		return filepath.Join(dir, "hamzad")
 	}
 
-	return filepath.Join(os.Getenv("HOME"), ".koochooloologin")
+	return filepath.Join(os.Getenv("HOME"), ".hamzad")
 }
 
 // Load builds the configuration from defaults, then the file at path (when it

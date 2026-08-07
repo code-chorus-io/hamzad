@@ -12,13 +12,13 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/chrome"
-	"github.com/1995parham/koochooloologin/internal/infra/config"
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/geo"
-	"github.com/1995parham/koochooloologin/internal/infra/proxy"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	domain "github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/chrome"
+	"github.com/code-chorus-io/hamzad/internal/infra/config"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/geo"
+	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 func openCommand() *cli.Command {

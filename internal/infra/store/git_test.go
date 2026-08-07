@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // newSyncStore returns a git-backed store with encryption configured, ready for
@@ -34,7 +34,7 @@ func newSyncStore(t *testing.T) (*store.Store, crypt.Crypt) {
 	// here. Both are set on the throwaway repo only.
 	for _, kv := range [][2]string{
 		{"user.email", "test@example.invalid"},
-		{"user.name", "koochooloologin test"},
+		{"user.name", "hamzad test"},
 		{"commit.gpgsign", "false"},
 	} {
 		runGit(t, st.Dir, "config", kv[0], kv[1])

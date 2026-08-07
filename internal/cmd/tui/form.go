@@ -7,8 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/proxy"
+	domain "github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
 )
 
 // field is one focusable row in the add-profile form: either a free-text input

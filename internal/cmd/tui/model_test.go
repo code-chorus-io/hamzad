@@ -7,10 +7,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/manager"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	domain "github.com/code-chorus-io/hamzad/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/manager"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // newTestModel builds a model over a temp store seeded with two profiles.
@@ -61,7 +61,7 @@ func TestDashboardRendersProfiles(t *testing.T) {
 	m = asModel(t, next)
 
 	content := m.View().Content
-	for _, want := range []string{"koochooloologin — sessions", "NAME", "alpha", "beta"} {
+	for _, want := range []string{"hamzad — sessions", "NAME", "alpha", "beta"} {
 		if !strings.Contains(content, want) {
 			t.Errorf("dashboard view missing %q\n---\n%s", want, content)
 		}

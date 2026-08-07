@@ -12,7 +12,7 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 )
 
 const (

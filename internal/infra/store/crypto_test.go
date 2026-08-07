@@ -10,8 +10,8 @@ import (
 
 	"filippo.io/age"
 
-	"github.com/1995parham/koochooloologin/internal/infra/crypt"
-	"github.com/1995parham/koochooloologin/internal/infra/store"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
+	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // newCrypt sets up a store with a fresh age identity as its sole recipient and

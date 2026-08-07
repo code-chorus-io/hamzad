@@ -3,7 +3,7 @@ package profile_test
 import (
 	"testing"
 
-	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
 func TestProfileValidate(t *testing.T) {

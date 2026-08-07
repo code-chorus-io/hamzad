@@ -10,9 +10,9 @@ import (
 
 	"github.com/urfave/cli/v3"
 
-	"github.com/1995parham/koochooloologin/internal/infra/browser"
-	"github.com/1995parham/koochooloologin/internal/infra/chrome"
-	"github.com/1995parham/koochooloologin/internal/infra/config"
+	"github.com/code-chorus-io/hamzad/internal/infra/browser"
+	"github.com/code-chorus-io/hamzad/internal/infra/chrome"
+	"github.com/code-chorus-io/hamzad/internal/infra/config"
 )
 
 // errVersionRequired is returned by `remove` with no argument.
@@ -70,7 +70,7 @@ func installCommand() *cli.Command {
 				return nil
 			}
 
-			fmt.Printf("pin it with 'chrome_version = \"%s\"' in the config, or KEL_CHROME_VERSION\n", meta.Version)
+			fmt.Printf("pin it with 'chrome_version = \"%s\"' in the config, or HAMZAD_CHROME_VERSION\n", meta.Version)
 
 			return nil
 		},
