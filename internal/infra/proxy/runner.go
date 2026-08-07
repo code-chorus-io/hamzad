@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 
 	box "github.com/sagernet/sing-box"
@@ -143,4 +145,37 @@ func registryContext(ctx context.Context) context.Context {
 	defer registryMu.Unlock()
 
 	return include.Context(ctx)
+}
+
+// WithRelay runs fn against a temporary relay for spec, then tears it down.
+//
+// It exists for the geolocation lookup, which has to egress through the very
+// proxy it is measuring. Borrowing the same relay Chrome would use means the
+// lookup speaks every protocol sing-box does — previously it went through
+// net/http's own proxy support, which handles only http and socks5 and could
+// not measure a vless or hysteria2 exit at all.
+//
+// A spec of "" calls fn with a nil URL, meaning a direct connection.
+func WithRelay(ctx context.Context, spec string, fn func(proxyURL *url.URL) error) error {
+	if strings.TrimSpace(spec) == "" {
+		return fn(nil)
+	}
+
+	outbound, err := ParseSpec(spec)
+	if err != nil {
+		return err
+	}
+
+	relay, err := Start(ctx, outbound)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = relay.Close() }()
+
+	local, err := url.Parse("http://" + relay.Addr())
+	if err != nil {
+		return fmt.Errorf("addressing local relay: %w", err)
+	}
+
+	return fn(local)
 }

@@ -1,23 +1,11 @@
 package chrome //nolint:testpackage // white-box: exercises the unexported WebRTC policy choice
 
 import (
-	"net/url"
 	"slices"
 	"testing"
 
 	"github.com/1995parham/koochooloologin/internal/domain/profile"
 )
-
-func mustProxy(t *testing.T, raw string) *url.URL {
-	t.Helper()
-
-	u, err := url.Parse(raw)
-	if err != nil {
-		t.Fatalf("parsing %q: %v", raw, err)
-	}
-
-	return u
-}
 
 // TestWebRTCDefaultsClosedWhenProxied is the important one. WebRTC speaks STUN
 // over UDP straight from the host's interfaces, so it goes around an HTTP proxy
@@ -27,7 +15,7 @@ func mustProxy(t *testing.T, raw string) *url.URL {
 func TestWebRTCDefaultsClosedWhenProxied(t *testing.T) {
 	t.Parallel()
 
-	o := Options{Proxy: mustProxy(t, "socks5://user:pass@1.2.3.4:1080")}
+	o := Options{ProxySpec: "socks5://user:pass@1.2.3.4:1080"}
 
 	if got := webRTCPolicy(o); got != WebRTCDisableNonProxiedUDP {
 		t.Errorf("proxied profile policy = %q, want %q", got, WebRTCDisableNonProxiedUDP)
@@ -57,7 +45,7 @@ func TestWebRTCExplicitModeWins(t *testing.T) {
 	t.Parallel()
 
 	o := Options{
-		Proxy:       mustProxy(t, "socks5://1.2.3.4:1080"),
+		ProxySpec:   "socks5://1.2.3.4:1080",
 		Fingerprint: profile.Fingerprint{WebRTCMode: WebRTCPublicOnly},
 	}
 
@@ -76,7 +64,7 @@ func TestWebRTCExplicitModeWins(t *testing.T) {
 func TestWebRTCFlagReachesTheCleanLaunch(t *testing.T) {
 	t.Parallel()
 
-	o := Options{UserDataDir: "/tmp/p", Proxy: mustProxy(t, "socks5://1.2.3.4:1080")}
+	o := Options{UserDataDir: "/tmp/p", ProxySpec: "socks5://1.2.3.4:1080"}
 
 	args := cleanArgs(o, "http://127.0.0.1:9")
 	want := "--webrtc-ip-handling-policy=" + WebRTCDisableNonProxiedUDP

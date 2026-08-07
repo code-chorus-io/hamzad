@@ -8,7 +8,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -21,6 +20,7 @@ import (
 	"github.com/chromedp/chromedp"
 
 	"github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/1995parham/koochooloologin/internal/infra/proxy"
 )
 
 // ErrNoBrowser is returned when no Chrome/Chromium executable can be located.
@@ -33,9 +33,11 @@ type Options struct {
 	ExecPath string
 	// UserDataDir is the profile's isolated Chrome data directory.
 	UserDataDir string
-	// Proxy, when non-nil, routes traffic through the given proxy; credentials
-	// in its userinfo are supplied to Chrome's proxy auth challenge.
-	Proxy *url.URL
+	// ProxySpec is the profile's proxy as the user wrote it: a share link
+	// (socks5://, vless://, trojan://, ss://) or a raw sing-box outbound JSON
+	// object. Empty means a direct connection. It is not a *url.URL because the
+	// protocols that matter most cannot be expressed as one.
+	ProxySpec string
 	// Timezone is an IANA zone applied via Emulation.setTimezoneOverride.
 	Timezone string
 	// StartURL is the first page to open; defaults to about:blank.
@@ -214,20 +216,24 @@ func cleanArgs(o Options, proxyArg string) []string {
 	return append(args, startURL(o))
 }
 
-// proxyForLaunch resolves the --proxy-server value for Chrome. An unauthenticated
-// proxy is passed straight through; an authenticated one is fronted by a local
-// relay (returned as a closer to stop on exit) that performs the upstream
-// handshake, since Chrome cannot supply proxy credentials. Returns an empty arg
-// and nil closer when the profile has no proxy.
+// proxyForLaunch brings up the local HTTP front end Chrome will use, returning
+// its address and a closer, or an empty address when the profile is direct.
+//
+// Everything goes through sing-box, including plain authenticated SOCKS5 that
+// the old hand-rolled relay handled. One path is worth more than a shortcut for
+// the simple case: two implementations would mean two sets of behaviour to keep
+// honest, and the simple case is not the one that breaks.
 func proxyForLaunch(ctx context.Context, o Options) (string, func() error, error) {
-	if o.Proxy == nil {
+	if o.ProxySpec == "" {
 		return "", nil, nil
 	}
-	if o.Proxy.User == nil {
-		return proxyServerArg(o.Proxy), nil, nil
+
+	outbound, err := proxy.ParseSpec(o.ProxySpec)
+	if err != nil {
+		return "", nil, err
 	}
 
-	relay, err := startAuthRelay(ctx, o.Proxy)
+	relay, err := proxy.Start(ctx, outbound)
 	if err != nil {
 		return "", nil, err
 	}
@@ -290,12 +296,6 @@ func execOptions(o Options, execPath, proxyArg string) []chromedp.ExecAllocatorO
 	}
 
 	return opts
-}
-
-// proxyServerArg renders the proxy for Chrome's --proxy-server flag, which
-// understands scheme://host:port but ignores any embedded credentials.
-func proxyServerArg(u *url.URL) string {
-	return fmt.Sprintf("%s://%s", u.Scheme, u.Host)
 }
 
 // buildActions assembles the CDP actions that apply the profile overrides

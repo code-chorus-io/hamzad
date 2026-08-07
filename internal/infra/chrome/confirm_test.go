@@ -2,7 +2,6 @@ package chrome //nolint:testpackage // white-box: exercises unexported confirm h
 
 import (
 	"encoding/base64"
-	"net/url"
 	"strings"
 	"testing"
 
@@ -64,12 +63,8 @@ func TestExpectedConfigFormatsSetFields(t *testing.T) {
 func TestExpectedConfigProxyHidesCredentials(t *testing.T) {
 	t.Parallel()
 
-	u, err := url.Parse("http://alice:s3cret@proxy.example:8080")
-	if err != nil {
-		t.Fatalf("parsing proxy: %v", err)
-	}
-
-	exp := expectedConfig(Options{Proxy: u})
+	//nolint:gosec // fixture credentials, the point of the test is that they are hidden
+	exp := expectedConfig(Options{ProxySpec: "http://alice:s3cret@proxy.example:8080"})
 
 	if got := exp["proxy"]; strings.Contains(got, "alice") || strings.Contains(got, "s3cret") {
 		t.Errorf("proxy field %q must not contain credentials", got)

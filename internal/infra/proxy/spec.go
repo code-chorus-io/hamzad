@@ -94,7 +94,11 @@ func parseRawJSON(raw string) (Outbound, error) {
 func fromURL(u *url.URL) (Outbound, error) {
 	switch strings.ToLower(u.Scheme) {
 	case "socks5", "socks5h", "socks":
-		return socksOutbound(u)
+		return socksOutbound(u, "5")
+	case "socks4":
+		return socksOutbound(u, "4")
+	case "socks4a":
+		return socksOutbound(u, "4a")
 	case schemeHTTP, "https":
 		return httpOutbound(u)
 	case "trojan":
@@ -139,14 +143,21 @@ func base(kind, host string, port uint16) Outbound {
 	}
 }
 
-func socksOutbound(u *url.URL) (Outbound, error) {
+func socksOutbound(u *url.URL, version string) (Outbound, error) {
 	host, port, err := hostPort(u)
 	if err != nil {
 		return nil, err
 	}
 
+	// SOCKS4 authenticates only a bare userid — there is no password method — so
+	// credentials on it cannot be honoured. Reject them rather than let sing-box
+	// drop them and the connection fail for a reason nobody can see.
+	if u.User != nil && strings.HasPrefix(version, "4") {
+		return nil, fmt.Errorf("%w: socks4 has no user/pass auth; use socks5", ErrUnsupportedScheme)
+	}
+
 	out := base("socks", host, port)
-	out["version"] = "5"
+	out["version"] = version
 	if u.User != nil {
 		pass, _ := u.User.Password()
 		out["username"] = u.User.Username()
@@ -343,4 +354,37 @@ func transportOptions(q url.Values) map[string]any {
 	default:
 		return nil
 	}
+}
+
+// Describe renders a proxy spec for display, without its credentials.
+//
+// The spec holds passwords, uuids and pre-shared keys — it is the one field the
+// store bothers to encrypt — so anything that reaches a screen, a log or the
+// confirmation page goes through here first.
+func Describe(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "-"
+	}
+
+	if strings.HasPrefix(raw, "{") {
+		out, err := parseRawJSON(raw)
+		if err != nil {
+			return "custom outbound"
+		}
+		kind, _ := out[keyType].(string)
+		server, _ := out["server"].(string)
+		if server == "" {
+			return kind
+		}
+
+		return fmt.Sprintf("%s via %s", server, kind)
+	}
+
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return "(unparseable)"
+	}
+
+	return fmt.Sprintf("%s via %s", u.Host, u.Scheme)
 }

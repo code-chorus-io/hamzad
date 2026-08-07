@@ -53,7 +53,7 @@ func webRTCPolicy(o Options) string {
 	if mode := o.Fingerprint.WebRTCMode; mode != "" {
 		return mode
 	}
-	if o.Proxy != nil {
+	if o.ProxySpec != "" {
 		return WebRTCDisableNonProxiedUDP
 	}
 
@@ -63,5 +63,5 @@ func webRTCPolicy(o Options) string {
 // webRTCLeaks reports whether a launch would let WebRTC reveal the host address
 // despite a proxy being configured, so callers can warn about it.
 func webRTCLeaks(o Options) bool {
-	return o.Proxy != nil && webRTCPolicy(o) != WebRTCDisableNonProxiedUDP
+	return o.ProxySpec != "" && webRTCPolicy(o) != WebRTCDisableNonProxiedUDP
 }

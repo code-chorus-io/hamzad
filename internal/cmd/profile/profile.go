@@ -16,6 +16,7 @@ import (
 	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
 	"github.com/1995parham/koochooloologin/internal/infra/config"
 	"github.com/1995parham/koochooloologin/internal/infra/crypt"
+	"github.com/1995parham/koochooloologin/internal/infra/proxy"
 	"github.com/1995parham/koochooloologin/internal/infra/store"
 )
 
@@ -153,6 +154,15 @@ func addCommand() *cli.Command {
 			p := domain.Profile{Name: name}
 			if err := applyFlags(&p, cmd); err != nil {
 				return err
+			}
+
+			// The domain only checks the shape; this rejects a scheme the proxy
+			// layer cannot actually map, so a typo fails here rather than at the
+			// first launch.
+			if p.Proxy != "" {
+				if _, err := proxy.ParseSpec(p.Proxy); err != nil {
+					return err
+				}
 			}
 
 			st := storeFrom(ctx)

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/1995parham/koochooloologin/internal/infra/proxy"
 )
 
 // Signal keys shared between expectedConfig, CleanModeDropped, and the
@@ -85,8 +87,10 @@ func expectedConfig(o Options) map[string]string {
 	if g := fp.Geolocation; g != nil {
 		exp[geolocationKey] = fmt.Sprintf("%.5f, %.5f", g.Latitude, g.Longitude)
 	}
-	if o.Proxy != nil {
-		exp["proxy"] = fmt.Sprintf("%s via %s", o.Proxy.Host, o.Proxy.Scheme)
+	if o.ProxySpec != "" {
+		// Describe redacts: the spec carries passwords, uuids and keys, and this
+		// map is rendered into a page.
+		exp["proxy"] = proxy.Describe(o.ProxySpec)
 	}
 
 	return exp

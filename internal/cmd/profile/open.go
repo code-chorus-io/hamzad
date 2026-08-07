@@ -17,6 +17,7 @@ import (
 	"github.com/1995parham/koochooloologin/internal/infra/config"
 	"github.com/1995parham/koochooloologin/internal/infra/crypt"
 	"github.com/1995parham/koochooloologin/internal/infra/geo"
+	"github.com/1995parham/koochooloologin/internal/infra/proxy"
 	"github.com/1995parham/koochooloologin/internal/infra/store"
 )
 
@@ -139,14 +140,14 @@ func openOptions(ctx context.Context, cmd *cli.Command, st *store.Store, c crypt
 		opts.StartURL = u
 	}
 
-	proxyURL, err := resolveProxy(st, c, name)
+	spec, err := resolveProxy(st, c, name)
 	if err != nil {
 		return chrome.Options{}, err
 	}
-	opts.Proxy = proxyURL
+	opts.ProxySpec = spec
 
 	if cmd.Bool("auto-geo") {
-		if err := applyAutoGeo(ctx, &opts, proxyURL); err != nil {
+		if err := applyAutoGeo(ctx, &opts, spec); err != nil {
 			return chrome.Options{}, err
 		}
 	}
@@ -154,45 +155,37 @@ func openOptions(ctx context.Context, cmd *cli.Command, st *store.Store, c crypt
 	return opts, nil
 }
 
-// resolveProxy decrypts and parses a profile's proxy, or returns nil when the
-// profile has none.
-func resolveProxy(st *store.Store, c crypt.Crypt, name string) (*url.URL, error) {
+// resolveProxy decrypts a profile's proxy spec, or returns "" when it has none.
+func resolveProxy(st *store.Store, c crypt.Crypt, name string) (string, error) {
 	if !st.HasSecret(name) {
-		//nolint:nilnil // a nil URL with nil error means "this profile has no proxy"
-		return nil, nil
+		return "", nil
 	}
 
-	raw, err := st.Proxy(c, name)
-	if err != nil {
-		return nil, err
-	}
-
-	u, err := domain.ParseProxy(raw)
-	if err != nil {
-		return nil, err
-	}
-
-	return u, nil
+	return st.Proxy(c, name)
 }
 
 // applyAutoGeo fills the session timezone and geolocation from the proxy's exit
-// IP, leaving any values the profile already pins untouched.
-func applyAutoGeo(ctx context.Context, opts *chrome.Options, proxyURL *url.URL) error {
-	loc, err := geo.Lookup(ctx, proxyURL)
-	if err != nil {
-		return err
-	}
+// IP, leaving any values the profile already pins untouched. The lookup egresses
+// through a temporary relay, so it measures the exit of whatever protocol the
+// profile actually uses.
+func applyAutoGeo(ctx context.Context, opts *chrome.Options, spec string) error {
+	return proxy.WithRelay(ctx, spec, func(proxyURL *url.URL) error {
+		loc, err := geo.Lookup(ctx, proxyURL)
+		if err != nil {
+			return err
+		}
 
-	fmt.Printf("auto-geo: exit IP %s (%s) → %s\n", loc.IP, loc.CountryCode, loc.Timezone)
+		fmt.Printf("auto-geo: exit IP %s (%s) → %s\n", loc.IP, loc.CountryCode, loc.Timezone)
 
-	if opts.Timezone == "" {
-		opts.Timezone = loc.Timezone
-	}
-	if opts.Fingerprint.Geolocation == nil {
-		opts.Fingerprint.Geolocation = &domain.LatLng{Latitude: loc.Latitude, Longitude: loc.Longitude}
-	}
+		if opts.Timezone == "" {
+			opts.Timezone = loc.Timezone
+		}
+		if opts.Fingerprint.Geolocation == nil {
+			opts.Fingerprint.Geolocation = &domain.LatLng{Latitude: loc.Latitude, Longitude: loc.Longitude}
+		}
 
-	return nil
+		return nil
+	})
 }
 
 // announceCDP waits for the debugging endpoint to come up, then prints the
@@ -251,13 +244,17 @@ func geoCommand() *cli.Command {
 				return err
 			}
 
-			proxyURL, err := resolveProxy(st, cryptFor(ctx, st), name)
+			spec, err := resolveProxy(st, cryptFor(ctx, st), name)
 			if err != nil {
 				return err
 			}
 
-			loc, err := geo.Lookup(ctx, proxyURL)
-			if err != nil {
+			var loc geo.Location
+			if err := proxy.WithRelay(ctx, spec, func(proxyURL *url.URL) error {
+				loc, err = geo.Lookup(ctx, proxyURL)
+
+				return err
+			}); err != nil {
 				return err
 			}
 

@@ -338,3 +338,24 @@ func TestConcurrentRelaysAreRaceFree(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// TestParseSpecHandlesSocks4 keeps a capability the old hand-rolled relay had.
+// sing-box's socks outbound takes a version, so socks4 still works — but
+// credentials on it do not, because socks4 authenticates a bare userid with no
+// password method at all. Dropping them silently would fail the connection for
+// a reason nobody could see.
+func TestParseSpecHandlesSocks4(t *testing.T) {
+	t.Parallel()
+
+	out, err := proxy.ParseSpec("socks4://1.2.3.4:1080")
+	if err != nil {
+		t.Fatalf("ParseSpec: %v", err)
+	}
+	if out[keyKind] != "socks" || out["version"] != "4" {
+		t.Errorf("socks4 mapped to %#v", out)
+	}
+
+	if _, err := proxy.ParseSpec("socks4://user:pass@1.2.3.4:1080"); err == nil {
+		t.Error("socks4 with credentials must be rejected; the protocol cannot carry them")
+	}
+}

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -28,20 +29,9 @@ var webRTCModes = map[string]struct{}{
 // ErrInvalidName is returned when a profile name is empty or malformed.
 var ErrInvalidName = errors.New("invalid profile name")
 
-// ErrUnsupportedProxyScheme is returned for a proxy URL whose scheme Chrome
-// cannot use.
-var ErrUnsupportedProxyScheme = errors.New("unsupported proxy scheme (want http, https, socks5, socks4)")
-
-// ErrProxyMissingHost is returned when a proxy URL has no host:port.
-var ErrProxyMissingHost = errors.New("proxy is missing host:port")
-
-// ErrProxyAuthUnsupported is returned for a proxy that carries credentials on a
-// scheme with no username/password auth method. SOCKS4 authenticates only a
-// bare userid (no password), so a user:pass on it cannot be honored. HTTP,
-// HTTPS, and SOCKS5 credentials are supported: koochooloologin routes an
-// authenticated proxy through a local relay (see infra/chrome) that performs the
-// upstream handshake, since Chrome cannot supply proxy credentials itself.
-var ErrProxyAuthUnsupported = errors.New("proxy scheme cannot authenticate credentials (SOCKS4 has no user/pass auth; use http, https, or socks5 for user:pass)")
+// ErrInvalidProxy is returned for a proxy spec that is neither a URL with a
+// scheme and host nor a raw sing-box outbound JSON object.
+var ErrInvalidProxy = errors.New("invalid proxy (want scheme://host:port or a sing-box outbound JSON object)")
 
 // nameRE constrains profile names to a filesystem- and git-friendly shape so a
 // name can double as a directory component in the store.
@@ -52,7 +42,9 @@ var nameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
 type Profile struct {
 	Name  string `json:"name"            koanf:"name"  toml:"name"`
 	Notes string `json:"notes,omitempty" koanf:"notes" toml:"notes,omitempty"`
-	// Proxy is never written to the plaintext profiles.toml (toml:"-"); it is
+	// Proxy is the upstream as the user wrote it: a share link (socks5://,
+	// vless://, trojan://, ss://) or a raw sing-box outbound JSON object. It is
+	// never written to the plaintext profiles.toml (toml:"-"); it is
 	// persisted encrypted in the store's secrets/ directory. It is populated in
 	// memory only when a command explicitly resolves it.
 	Proxy       string      `json:"proxy,omitempty"     koanf:"proxy"       toml:"-"`
@@ -95,10 +87,8 @@ func (p Profile) Validate() error {
 		return fmt.Errorf("%w: %q (use letters, digits, '-' or '_', max 64 chars)", ErrInvalidName, p.Name)
 	}
 
-	if p.Proxy != "" {
-		if _, err := ParseProxy(p.Proxy); err != nil {
-			return err
-		}
+	if err := ValidateProxySpec(p.Proxy); err != nil {
+		return err
 	}
 
 	if m := p.Fingerprint.WebRTCMode; m != "" {
@@ -116,39 +106,34 @@ func (p Profile) Validate() error {
 	return nil
 }
 
-// supportedProxySchemes are the proxy transports Chrome understands via
-// --proxy-server. SOCKS4 is included for completeness though rarely used.
-var supportedProxySchemes = map[string]struct{}{
-	"http":   {},
-	"https":  {},
-	"socks5": {},
-	"socks4": {},
-}
+// ValidateProxySpec checks a proxy spec is syntactically plausible.
+//
+// This is deliberately shallow. Which protocols are actually supported is a
+// property of the proxy layer, not the domain — and that layer speaks a dozen
+// of them, several with no URL form at all. So the domain only asks whether the
+// value is one of the two shapes a spec can take, and the launcher rejects a
+// scheme it cannot map.
+func ValidateProxySpec(raw string) error {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
 
-// ParseProxy parses a proxy URL of the form scheme://[user:pass@]host:port and
-// validates its scheme. Credentials, when present, are preserved on the result
-// for the launcher to feed to Chrome's Fetch auth handler.
-func ParseProxy(raw string) (*url.URL, error) {
+	// A raw sing-box outbound object; its contents are the proxy layer's business.
+	if strings.HasPrefix(raw, "{") {
+		return nil
+	}
+
 	u, err := url.Parse(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parsing proxy %q: %w", raw, err)
+		return fmt.Errorf("%w: %w", ErrInvalidProxy, err)
 	}
-
-	if _, ok := supportedProxySchemes[u.Scheme]; !ok {
-		return nil, fmt.Errorf("%w: %q", ErrUnsupportedProxyScheme, u.Scheme)
+	if u.Scheme == "" {
+		return fmt.Errorf("%w: %q has no scheme", ErrInvalidProxy, raw)
 	}
-
 	if u.Host == "" {
-		return nil, fmt.Errorf("%w: %q", ErrProxyMissingHost, raw)
+		return fmt.Errorf("%w: %q has no host:port", ErrInvalidProxy, raw)
 	}
 
-	// SOCKS4 has no username/password auth method (only a bare userid), so
-	// credentials on it cannot be honored; reject them up front rather than let
-	// them be dropped and the connection fail opaquely. HTTP/HTTPS/SOCKS5
-	// credentials are handled by the launch-time auth relay.
-	if u.User != nil && u.Scheme == "socks4" {
-		return nil, fmt.Errorf("%w: %q", ErrProxyAuthUnsupported, u.Scheme)
-	}
-
-	return u, nil
+	return nil
 }

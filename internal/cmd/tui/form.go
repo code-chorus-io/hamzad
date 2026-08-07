@@ -8,6 +8,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	domain "github.com/1995parham/koochooloologin/internal/domain/profile"
+	"github.com/1995parham/koochooloologin/internal/infra/proxy"
 )
 
 // field is one focusable row in the add-profile form: either a free-text input
@@ -136,16 +137,23 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	proxy := m.form.text("proxy")
-	if proxy != "" && !m.crypt.Configured() {
-		m.form.err = "encryption not configured; run 'store init' before adding a proxy"
+	proxySpec := m.form.text("proxy")
+	if proxySpec != "" {
+		if _, err := proxy.ParseSpec(proxySpec); err != nil {
+			m.form.err = err.Error()
 
-		return m, nil
+			return m, nil
+		}
+		if !m.crypt.Configured() {
+			m.form.err = "encryption not configured; run 'store init' before adding a proxy"
+
+			return m, nil
+		}
 	}
 
 	p := domain.Profile{
 		Name:     name,
-		Proxy:    proxy,
+		Proxy:    proxySpec,
 		Timezone: m.form.text("timezone"),
 		StartURL: m.form.text("start-url"),
 		Notes:    m.form.text("notes"),
@@ -158,8 +166,8 @@ func (m Model) submitForm() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	if proxy != "" {
-		if err := m.store.SetProxy(m.crypt, name, proxy); err != nil {
+	if proxySpec != "" {
+		if err := m.store.SetProxy(m.crypt, name, proxySpec); err != nil {
 			m.form.err = "profile saved but proxy failed: " + err.Error()
 
 			return m, nil
