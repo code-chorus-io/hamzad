@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"net"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +38,7 @@ type readback struct {
 	WebGLVendor         string   `json:"webglVendor"`
 	Timezone            string   `json:"timezone"`
 	Webdriver           bool     `json:"webdriver"`
+	WebdriverGetter     string   `json:"webdriverGetter"`
 }
 
 const readbackExpr = `JSON.stringify({
@@ -53,6 +55,10 @@ const readbackExpr = `JSON.stringify({
   } catch (e) { return "" } })(),
   timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
   webdriver: navigator.webdriver,
+  webdriverGetter: (() => { try {
+    const d = Object.getOwnPropertyDescriptor(Navigator.prototype, "webdriver");
+    return d && d.get ? d.get.toString() : "absent";
+  } catch (e) { return "error" } })(),
 })`
 
 // TestLaunchCDPAppliesEveryOverride launches a fully-specified profile and reads
@@ -128,6 +134,12 @@ func TestLaunchCDPAppliesEveryOverride(t *testing.T) {
 	}
 	if got.Webdriver {
 		t.Error("navigator.webdriver = true, want false")
+	}
+	// The value being false is not enough: it has to be false the way a real
+	// Chrome reports it. A JS getter here is what Function.prototype.toString
+	// exposes, and it is what gets a sign-in refused as "not secure".
+	if !strings.Contains(got.WebdriverGetter, "[native code]") {
+		t.Errorf("navigator.webdriver getter = %q, want the native one", got.WebdriverGetter)
 	}
 }
 

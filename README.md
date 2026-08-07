@@ -158,6 +158,8 @@ Mind the ❌ on `navigator.platform`: an operating-system preset sets the platfo
 
 The default landing page reports every configured value beside the one the browser actually hands to page JavaScript, so a launch can be verified at a glance.
 
+**`navigator.webdriver` is deliberately not patched.** Chrome reports it `false` here on its own — nothing passes `--enable-automation`, and an attached CDP session does not set the flag — so a `defineProperty` would replace an honest native getter with a JS one, and a JS getter is exactly what `Function.prototype.toString` exposes. This is not theoretical: with the patch, `accounts.google.com` refuses the browser with "This browser or app may not be secure"; without it, the same profile signs in normally. It is the one signal where spoofing is strictly worse than telling the truth.
+
 For high-scrutiny targets the JS-patched signals need a patched Chromium (GoLogin's "Orbita"); the launch layer is designed so such a binary can be swapped in via `--chrome-path` without changing the CLI.
 
 A profile with a proxy defaults to `disable_non_proxied_udp`, because WebRTC otherwise speaks STUN over UDP straight from the host's interfaces — around the proxy entirely — and hands any page the real address while every other signal insists otherwise. That mismatch is worse than not proxying at all. A profile without a proxy keeps Chrome's default so video calls still work; override either with `--webrtc-mode`. New profiles open with browserleaks.com/ip and /webrtc bookmarked, so the claim is one click from being checked.

@@ -68,8 +68,10 @@ func expectedConfig(o Options) map[string]string {
 		platformKey: fp.Platform,
 		"timezone":  o.Timezone,
 		"languages": strings.Join(fp.Languages, ", "),
-		// The launcher always neutralizes the automation tell, so webdriver is
-		// expected to read false on every profile.
+		// Chrome reports this false on its own under both launch paths, and the
+		// launcher deliberately does not patch it — a JS getter here is a
+		// sharper tell than the value it hides. Expected false on every profile
+		// because that is the honest answer, not because anything forced it.
 		"webdriver":     "false",
 		"webglVendor":   fp.WebGLVendor,
 		"webglRenderer": fp.WebGLRenderer,

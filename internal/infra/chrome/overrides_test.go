@@ -46,6 +46,25 @@ func TestPatchScriptIsPrecededByPageEnable(t *testing.T) {
 	}
 }
 
+// TestBareProfileEnablesNoDomain is the counterweight to the Page.enable fix: a
+// profile that requests no injected patches must inject nothing and enable
+// nothing, leaving the CDP launch with no domain enabled at all — the property
+// the cdp package was written for.
+func TestBareProfileEnablesNoDomain(t *testing.T) {
+	t.Parallel()
+
+	got := methods(Options{
+		Timezone:    testTZ,
+		Fingerprint: profile.Fingerprint{UserAgent: "UA", Platform: testPlatform, HardwareConcurrent: 8},
+	})
+
+	for _, m := range got {
+		if strings.HasSuffix(m, ".enable") {
+			t.Errorf("bare profile enabled %s; it injects no script and needs no domain: %v", m, got)
+		}
+	}
+}
+
 // TestPageIsTheOnlyDomainEnabled keeps the concession minimal. Page.enable
 // bought back the entire injected-patch layer, which does not run without it,
 // and under --cdp-port an open debug port is a far louder signal than an
