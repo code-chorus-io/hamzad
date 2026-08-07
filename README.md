@@ -91,7 +91,7 @@ hamzad --store personal profile add shopping
 hamzad store list          # which stores exist, and which is active
 ```
 
-Stores live under `$XDG_CONFIG_HOME/hamzad/stores/<name>`; omitting `--store` uses `default`. Set it per shell with `HAMZAD_STORE=work`, or pin one in the config with `store = "work"`. For a store kept outside the config root — a shared checkout, an encrypted volume — `--store-dir /path` addresses it directly and overrides the name.
+Stores live under `hamzad/stores/<name>` in your platform's config directory — `$XDG_CONFIG_HOME` on Linux, `~/Library/Application Support` on macOS, `%AppData%` on Windows. Omitting `--store` uses `default`. Set it per shell with `HAMZAD_STORE=work`, or pin one in the config with `store = "work"`. For a store kept outside the config root — a shared checkout, an encrypted volume — `--store-dir /path` addresses it directly and overrides the name.
 
 An installation that predates named stores, with its store sitting directly in the config root, keeps working as-is; naming a store is what opts you into the new layout.
 
@@ -149,7 +149,7 @@ The default **clean** launch can only use process-level flags and environment. E
 | `navigator.platform` | CDP `setUserAgentOverride` platform hint | ❌ | ✅ |
 | Accept-Language / locale | CDP `setUserAgentOverride` / `setLocaleOverride` | ❌ | ✅ |
 | Geolocation | CDP `setGeolocationOverride` + permission grant | ❌ | ✅ |
-| `screen.width/height` | CDP `setDeviceMetricsOverride` + injected JS | ❌ | ✅ |
+| `screen.width/height` | injected JS (`setDeviceMetricsOverride` sizes the viewport, not `screen`) | ❌ | best-effort, detectable |
 | `hardwareConcurrency` | CDP `setHardwareConcurrencyOverride` | ❌ | ✅ (engine-level, reaches Workers) |
 | deviceMemory / languages | injected JS (`defineProperty`) | ❌ | best-effort, detectable |
 | Canvas noise / WebGL vendor-renderer | injected JS hooks | ❌ | best-effort, detectable |
@@ -162,11 +162,13 @@ For high-scrutiny targets the JS-patched signals need a patched Chromium (GoLogi
 
 A profile with a proxy defaults to `disable_non_proxied_udp`, because WebRTC otherwise speaks STUN over UDP straight from the host's interfaces — around the proxy entirely — and hands any page the real address while every other signal insists otherwise. That mismatch is worse than not proxying at all. A profile without a proxy keeps Chrome's default so video calls still work; override either with `--webrtc-mode`. New profiles open with browserleaks.com/ip and /webrtc bookmarked, so the claim is one click from being checked.
 
-Two known leaks remain, both stated plainly because they are the difference between "spoofed" and "unnoticed".
+Three known leaks remain, all stated plainly because they are the difference between "spoofed" and "unnoticed".
 
-**`deviceMemory` inside a Worker.** Injected patches run only in the page's main JS world, and a `Worker` gets a fresh one — so `navigator.deviceMemory` there reports the host's real value while the page claims otherwise. The mismatch is the tell, not the number. `hardwareConcurrency` used to leak the same way and no longer does: it moved to CDP's `setHardwareConcurrencyOverride`, which the engine applies everywhere. There is no equivalent for `deviceMemory`, so closing it needs either a patched Chromium or intercepting worker construction, both of which carry their own tells.
+**Injected patches do not reach a Worker.** They run only in the page's main JS world, and a `Worker` gets a fresh one — so `navigator.deviceMemory` and `navigator.languages` there report the host's real values while the page claims otherwise. The mismatch is the tell, not the number. `hardwareConcurrency` used to leak the same way and no longer does: it moved to CDP's `setHardwareConcurrencyOverride`, which the engine applies everywhere. There is no equivalent for the others, so closing them needs either a patched Chromium or intercepting worker construction, both of which carry their own tells.
 
-**The CDP `Runtime` domain.** Under `--cdp-port`, [chromedp](https://github.com/chromedp/chromedp) calls `Runtime.enable` unconditionally while attaching (`chromedp.go:445`, used to tell a worker target from a page). Anti-bot services probe for exactly that. It cannot be switched off through chromedp's API — avoiding it means driving CDP directly instead. The default clean launch has neither this nor an open debug port, which is why it is the default.
+**`navigator.platform` does not survive a second CDP client.** It is carried by `Emulation.setUserAgentOverride`, which Chrome scopes to the DevTools session that set it — and it resets when *another* session attaches and detaches. So a Puppeteer or Playwright client connecting to `--cdp-port` silently strips the platform override on disconnect, leaving a Windows user-agent on a host-platform `navigator.platform`. Re-applying on session change is the fix; it is not implemented yet.
+
+**Confirmation-page blind spot.** The default landing page is a `data:` URL, which is an opaque, non-secure origin. Geolocation refuses to report there (`Only secure origins are allowed`), so the page cannot verify the one signal it most wants to, and `navigator.userAgentData` is undefined so the platform row falls back to `navigator.platform`. Serving it from loopback instead would fix both.
 
 Canvas noise is a single fixed pattern rather than a per-profile one: it hides a profile's canvas from the host's own fingerprint, but two noised profiles still hash alike, so it does not defeat cross-profile linking.
 
