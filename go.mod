@@ -11,6 +11,7 @@ require (
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/chromedp/cdproto v0.0.0-20260714215040-dc233986426f
 	github.com/chromedp/chromedp v0.16.0
+	github.com/coder/websocket v1.8.14
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.0
 	github.com/knadh/koanf/providers/file v1.2.1
@@ -21,7 +22,6 @@ require (
 	github.com/things-go/go-socks5 v0.1.1
 	github.com/urfave/cli/v3 v3.10.1
 	golang.org/x/crypto v0.54.0
-	golang.org/x/net v0.57.0
 	golang.org/x/term v0.45.0
 )
 
@@ -46,7 +46,6 @@ require (
 	github.com/chromedp/sysutil v1.1.0 // indirect
 	github.com/clipperhouse/displaywidth v0.11.0 // indirect
 	github.com/clipperhouse/uax29/v2 v2.7.0 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
 	github.com/coreos/go-iptables v0.7.1-0.20240112124308-65c67c9f46e6 // indirect
 	github.com/cretz/bine v0.2.0 // indirect
 	github.com/database64128/netx-go v0.1.1 // indirect
@@ -177,6 +176,7 @@ require (
 	go4.org/netipx v0.0.0-20231129151722-fdeea329fbba // indirect
 	golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 // indirect
 	golang.org/x/mod v0.37.0 // indirect
+	golang.org/x/net v0.57.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
