@@ -20,11 +20,19 @@ import (
 // addScriptToEvaluateOnNewDocument returns a script identifier and then never
 // runs the script. See overrides(), which pairs the two.
 func patchScript(fp profile.Fingerprint) string {
-	// Pin the automation tell first. A plain Chrome driven this way already
-	// reports navigator.webdriver === false — nothing here sets it true — but a
-	// flag or an attaching automation client can flip it, and the cost of
-	// asserting the honest value is one getter.
-	parts := []string{defineNavigator("webdriver", false)}
+	// navigator.webdriver is deliberately NOT patched, and this is the one place
+	// where patching a signal made things strictly worse.
+	//
+	// A plain Chrome driven the way this launcher drives it already reports
+	// false: nothing here passes --enable-automation, and an attached CDP
+	// session does not set the flag. So the patch replaced an honest native
+	// getter with a JS one — and a JS getter is exactly what
+	// Function.prototype.toString exposes. Google's sign-in check reads it:
+	// with the patch, `accounts.google.com` answers "This browser or app may
+	// not be secure"; without it, the same profile signs in normally. Asserting
+	// a value the browser already reports truthfully costs a real tell and buys
+	// nothing.
+	var parts []string
 
 	// hardwareConcurrency is deliberately absent: it is set through CDP's
 	// Emulation.setHardwareConcurrencyOverride instead. That reaches Workers,
@@ -46,6 +54,13 @@ func patchScript(fp profile.Fingerprint) string {
 	}
 	if fp.CanvasNoise {
 		parts = append(parts, canvasNoisePatch())
+	}
+
+	// No patches requested means no script, which in turn means overrides()
+	// never enables the Page domain. A profile that asks for nothing should
+	// leave nothing to find.
+	if len(parts) == 0 {
+		return ""
 	}
 
 	return "(() => {\n" + strings.Join(parts, "\n") + "\n})();"

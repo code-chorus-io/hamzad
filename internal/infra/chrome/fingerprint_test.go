@@ -92,20 +92,54 @@ func TestCanvasNoiseScriptKeysOffPixelIndex(t *testing.T) {
 }
 
 // TestPatchScriptOmitsUnrequestedPatches keeps the injected surface minimal: a
-// profile that asks for nothing still gets the webdriver fix (a plain Chrome
-// reports false, so a CDP session must too) and nothing else.
+// profile that asks for nothing must inject nothing at all, so overrides()
+// never enables the Page domain for it either.
 func TestPatchScriptOmitsUnrequestedPatches(t *testing.T) {
 	t.Parallel()
 
-	script := patchScript(profile.Fingerprint{})
-
-	if !strings.Contains(script, "webdriver") {
-		t.Error("webdriver must always be neutralized")
+	if script := patchScript(profile.Fingerprint{}); script != "" {
+		t.Errorf("a bare fingerprint must inject no script, got %q", script)
 	}
-	for _, absent := range []string{"getImageData", "getParameter", hardwareConcurrencyKey, deviceMemoryKey} {
+
+	script := patchScript(profile.Fingerprint{CanvasNoise: true})
+	for _, absent := range []string{"getParameter", hardwareConcurrencyKey, deviceMemoryKey} {
 		if strings.Contains(script, absent) {
-			t.Errorf("bare fingerprint should not patch %q", absent)
+			t.Errorf("canvas-noise-only fingerprint should not patch %q", absent)
 		}
+	}
+}
+
+// TestWebdriverIsNeverPatched pins a fix that a reasonable person would undo.
+//
+// Patching navigator.webdriver looks like the obvious anti-detection move, and
+// it is the one signal where patching is strictly worse than leaving it alone.
+// Chrome already reports false here — nothing passes --enable-automation, and
+// an attached CDP session does not set the flag — so a defineProperty replaces
+// an honest native getter with a JS one, which is exactly what
+// Function.prototype.toString exposes. Measured against the real thing: with
+// the patch, accounts.google.com answers "This browser or app may not be
+// secure"; without it, the same profile signs in normally.
+func TestWebdriverIsNeverPatched(t *testing.T) {
+	t.Parallel()
+
+	// Every fingerprint that injects anything at all must still leave the
+	// native getter alone.
+	for name, fp := range map[string]profile.Fingerprint{
+		"bare":         {},
+		"canvas noise": {CanvasNoise: true},
+		"webgl":        {WebGLVendor: "Google Inc. (NVIDIA)"},
+		"everything": {
+			DeviceMemory: 8, Languages: []string{testLang}, CanvasNoise: true,
+			WebGLVendor: "Google Inc. (NVIDIA)", ScreenWidth: 1920, ScreenHeight: 1080,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			if script := patchScript(fp); strings.Contains(script, "webdriver") {
+				t.Error("navigator.webdriver must stay the native getter; patching it is what Google detects")
+			}
+		})
 	}
 }
 
