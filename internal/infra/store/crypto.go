@@ -18,6 +18,7 @@ import (
 const (
 	recipientsFile = "recipients.txt"
 	secretsSubdir  = "secrets"
+	secretSuffix   = ".age"
 	bundleSuffix   = ".tar.age"
 	// maxBundleEntry caps a single decompressed archive member to guard against
 	// decompression bombs when unpacking an untrusted bundle.
@@ -42,7 +43,7 @@ func (s *Store) RecipientsPath() string {
 }
 
 func (s *Store) secretPath(name string) string {
-	return filepath.Join(s.Dir, secretsSubdir, name+".age")
+	return filepath.Join(s.Dir, secretsSubdir, name+secretSuffix)
 }
 
 // BundlePath is the path to a profile's encrypted user-data-dir bundle.

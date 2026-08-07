@@ -34,7 +34,8 @@ const (
 	gitignoreBody = "# unencrypted working browser data stays local (encrypted bundles are shared)\n" +
 		"/data/*/\n" +
 		"/.profiles-*.toml\n" +
-		"/data/.*.tmp\n"
+		"/data/.*.tmp\n" +
+		"/secrets/.*.tmp\n"
 )
 
 // Store is a handle to an on-disk profile store rooted at Dir.
