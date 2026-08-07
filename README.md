@@ -116,7 +116,8 @@ The bundle deliberately leaves out Chrome's caches — `Cache`, `Code Cache`, `G
 hamzad store init --remote git@github.com:you/profiles.git
 
 # add a teammate so they can decrypt (their SSH public key, or a file of keys)
-hamzad store recipients add 'ssh-ed25519 AAAA...teammate'
+# --reencrypt rewrites what is already stored so the new key can read it too
+hamzad store recipients add --reencrypt 'ssh-ed25519 AAAA...teammate'
 hamzad store recipients list
 
 hamzad store sync -m "share work profile"   # commit + pull --rebase + push
@@ -129,7 +130,21 @@ A teammate clones the repo, runs `store sync`, then `profile open work` — thei
 
 `open` only restores a bundle when there is **no local working copy**, since unpacking replaces the directory outright and the local copy may hold newer browsing. So after pulling a teammate's newer session for a profile you have already opened, `open` keeps yours and says so — run `profile pull <name>` to take theirs.
 
-> After adding new recipients, re-encrypt existing secrets so they can read them (`profile add --proxy …` again, or `profile push`). age can only encrypt to keys known at encryption time.
+### Adding a recipient after the fact
+
+age fixes the recipient set at the moment a file is written, so a key added later cannot read anything already stored. A new teammate sees `profiles.toml` and `recipients.txt` — both plaintext — but every `profile open` fails at the decrypt. Adding the key is only half the job:
+
+```sh
+hamzad store recipients add 'ssh-ed25519 AAAA...teammate'
+hamzad store reencrypt   # rewrite every secret and bundle to the current recipients
+hamzad store sync -m "add teammate"
+```
+
+`store recipients add --reencrypt` does both in one step.
+
+`reencrypt` needs your identity — it decrypts each artifact before writing it back — and it re-encrypts only what your key can read. Anything it cannot decrypt is listed as `FAILED` and left untouched, and the command exits non-zero, so a partial rotation cannot be mistaken for a complete one. Ask whoever can still read those profiles to run it on their machine.
+
+Every bundle it rewrites is committed whole on the next sync, since age output is incompressible and git cannot delta it — the same size ceiling described above applies.
 
 ## Automation attach
 
