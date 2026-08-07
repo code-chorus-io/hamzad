@@ -142,17 +142,39 @@ func (s *Store) Sync(ctx context.Context, message string) error {
 		}
 	}
 
-	hasRemote := s.Remote(ctx) != ""
-	if !hasRemote {
+	if s.Remote(ctx) == "" {
 		return nil
 	}
 
-	if _, err := s.git(ctx, "pull", "--rebase", "origin", "HEAD"); err != nil {
-		return err
+	return s.pushToRemote(ctx)
+}
+
+// pushToRemote integrates origin's work and publishes ours.
+//
+// Rebasing onto a remote that has no commits yet fails with "couldn't find
+// remote ref HEAD" — and that is the documented first-run sequence, `store init
+// --remote <fresh repo>` followed by `store sync`. There is nothing to rebase
+// onto in that case, so the pull is skipped and the push creates the branch.
+func (s *Store) pushToRemote(ctx context.Context) error {
+	if s.remoteHasCommits(ctx) {
+		if _, err := s.git(ctx, "pull", "--rebase", "origin", "HEAD"); err != nil {
+			return err
+		}
 	}
+
 	if _, err := s.git(ctx, "push", "-u", "origin", "HEAD"); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+// remoteHasCommits reports whether origin has any refs to rebase onto. A brand
+// new repository has none, and an unreachable remote reports none too — the
+// push that follows is what surfaces that, with a far better message than a
+// rebase against a ref that does not exist.
+func (s *Store) remoteHasCommits(ctx context.Context) bool {
+	out, err := s.git(ctx, "ls-remote", "--heads", "origin")
+
+	return err == nil && out != ""
 }

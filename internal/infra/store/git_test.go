@@ -14,6 +14,10 @@ import (
 	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
+// workBundlePath is the committed artifact for the "work" profile fixture, named
+// once because several assertions look for exactly this path.
+const workBundlePath = "data/work.tar.age"
+
 // newSyncStore returns a git-backed store with encryption configured, ready for
 // Sync. It skips the test when git is unavailable rather than failing, so the
 // suite still runs on a machine without it.
@@ -115,7 +119,7 @@ func TestSyncCommitsEverySharedArtifact(t *testing.T) {
 		"recipients.txt",
 		"secrets/work.age",
 		"secrets/personal.age",
-		"data/work.tar.age",
+		workBundlePath,
 		"data/personal.tar.age",
 	} {
 		if !slices.Contains(files, want) {
@@ -199,7 +203,7 @@ func TestSyncRecordsRemovals(t *testing.T) {
 	}
 
 	files := tracked(t, st.Dir)
-	for _, gone := range []string{"secrets/work.age", "data/work.tar.age"} {
+	for _, gone := range []string{"secrets/work.age", workBundlePath} {
 		if slices.Contains(files, gone) {
 			t.Errorf("Sync left %q tracked after the profile was removed", gone)
 		}
