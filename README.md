@@ -77,6 +77,24 @@ Share links are parsed for `socks5`/`socks4`/`http`/`https`, `vless`, `trojan` a
 
 Whatever the protocol, Chrome only ever sees an unauthenticated HTTP proxy on loopback. Chrome cannot authenticate a proxy from the command line and cannot speak SOCKS auth at all, so sing-box runs the real handshake behind that listener. A share link's `fp=chrome` is honoured: the TLS ClientHello is made to look like Chrome's, which matters as much as the address does.
 
+## Named stores
+
+Profiles live in a **store**, and you can have several. Each is its own git repository with its own profiles, recipients and session bundles, so a work set shared with colleagues never mixes with a personal one.
+
+```sh
+hamzad --store work store init --remote git@github.com:acme/profiles.git
+hamzad --store work profile add client-a --proxy 'socks5://…'
+
+hamzad --store personal store init
+hamzad --store personal profile add shopping
+
+hamzad store list          # which stores exist, and which is active
+```
+
+Stores live under `$XDG_CONFIG_HOME/hamzad/stores/<name>`; omitting `--store` uses `default`. Set it per shell with `HAMZAD_STORE=work`, or pin one in the config with `store = "work"`. For a store kept outside the config root — a shared checkout, an encrypted volume — `--store-dir /path` addresses it directly and overrides the name.
+
+An installation that predates named stores, with its store sitting directly in the config root, keeps working as-is; naming a store is what opts you into the new layout.
+
 ## Sharing profiles (git + age encryption)
 
 The store is a git repository. Secrets and session state are **encrypted with [age](https://age-encryption.org)** before they are committed, using your team's public keys — **SSH keys work directly as age recipients**, so there is nothing new to generate.

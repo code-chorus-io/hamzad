@@ -50,8 +50,13 @@ func rootFlags() []cli.Flag {
 			Sources: cli.EnvVars(config.EnvPrefix + "CONFIG"),
 		},
 		&cli.StringFlag{
+			Name:    "store",
+			Usage:   "which named store to use (e.g. work, personal)",
+			Sources: cli.EnvVars(config.EnvPrefix + "STORE"),
+		},
+		&cli.StringFlag{
 			Name:    "store-dir",
-			Usage:   "override the profile store directory",
+			Usage:   "use a store at an explicit path, overriding --store",
 			Sources: cli.EnvVars(config.EnvPrefix + "STORE_DIR"),
 		},
 		&cli.StringFlag{
@@ -81,6 +86,9 @@ func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) 
 		return ctx, err
 	}
 
+	if cmd.IsSet("store") {
+		cfg.Store = cmd.String("store")
+	}
 	if cmd.IsSet("store-dir") {
 		cfg.StoreDir = cmd.String("store-dir")
 	}
@@ -92,6 +100,12 @@ func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) 
 	}
 	if cmd.IsSet("identity") {
 		cfg.IdentityPath = cmd.String("identity")
+	}
+
+	// Resolve last: the store name only becomes a path once the file, the
+	// environment and the flags have all had their say.
+	if err := cfg.Resolve(); err != nil {
+		return ctx, err
 	}
 
 	return config.With(ctx, &cfg), nil

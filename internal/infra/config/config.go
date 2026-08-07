@@ -5,9 +5,12 @@ package config
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/knadh/koanf/parsers/toml/v2"
@@ -31,7 +34,14 @@ type Config struct {
 	// a profile's fingerprint stays matched to the engine it was built around.
 	// Empty means "use whatever the host has".
 	ChromeVersion string `json:"chrome_version" koanf:"chrome_version"`
-	// StoreDir is the directory holding the profile store (a git repository).
+	// Store names which store to use — "work", "personal". Stores are separate
+	// git repositories under the config root, each with its own profiles,
+	// recipients and session bundles, so a work identity set can be shared with
+	// colleagues while a personal one stays private. Empty means DefaultStore.
+	Store string `json:"store" koanf:"store"`
+	// StoreDir is the resolved directory holding the store. Setting it directly
+	// is the escape hatch for a store kept outside the config root — a shared
+	// checkout, an encrypted volume — and it overrides Store when both are given.
 	StoreDir string `json:"store_dir" koanf:"store_dir"`
 	// IdentityPath is the age or SSH private key used to decrypt secrets and
 	// session bundles. Encryption never needs it — only decryption does.
@@ -43,8 +53,11 @@ func Default() Config {
 	return Config{
 		ChromePath:    "",
 		ChromeVersion: "",
-		StoreDir:      defaultStoreDir(),
-		IdentityPath:  defaultIdentityPath(),
+		Store:         "",
+		// Left empty so Resolve can tell "not set" from "set to the default", and
+		// pick the path from Store instead.
+		StoreDir:     "",
+		IdentityPath: defaultIdentityPath(),
 	}
 }
 
@@ -52,12 +65,93 @@ func defaultIdentityPath() string {
 	return filepath.Join(os.Getenv("HOME"), ".ssh", "id_ed25519")
 }
 
-func defaultStoreDir() string {
+// DefaultStore is the store used when none is named.
+const DefaultStore = "default"
+
+// storesDir holds the named stores, one directory each.
+const storesDir = "stores"
+
+// ErrInvalidStoreName is returned for a name that cannot be a directory.
+var ErrInvalidStoreName = errors.New("invalid store name")
+
+// storeNameRE keeps a name usable as a single path component, so it cannot
+// escape the config root or collide with the layout around it.
+var storeNameRE = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$`)
+
+// Root is the directory holding configuration and the named stores.
+func Root() string {
 	if dir, err := os.UserConfigDir(); err == nil {
 		return filepath.Join(dir, "hamzad")
 	}
 
 	return filepath.Join(os.Getenv("HOME"), ".hamzad")
+}
+
+// StorePath is where a named store lives.
+func StorePath(name string) (string, error) {
+	if !storeNameRE.MatchString(name) {
+		return "", fmt.Errorf("%w: %q (use letters, digits, '-' or '_')", ErrInvalidStoreName, name)
+	}
+
+	return filepath.Join(Root(), storesDir, name), nil
+}
+
+// Resolve turns a store name into a directory, once every layer of
+// configuration has had its say. An explicit StoreDir always wins.
+//
+// A store laid out directly in the config root — the single-store layout that
+// predates named stores — keeps working untouched: adopting it in place is the
+// only way to avoid silently orphaning profiles that are already there.
+func (c *Config) Resolve() error {
+	if c.StoreDir != "" {
+		return nil
+	}
+
+	if c.Store == "" {
+		if legacyRootStore() {
+			c.StoreDir = Root()
+
+			return nil
+		}
+		c.Store = DefaultStore
+	}
+
+	dir, err := StorePath(c.Store)
+	if err != nil {
+		return err
+	}
+	c.StoreDir = dir
+
+	return nil
+}
+
+// legacyRootStore reports whether the config root is itself a store, which is
+// how a single-store installation looks.
+func legacyRootStore() bool {
+	_, err := os.Stat(filepath.Join(Root(), "profiles.toml"))
+
+	return err == nil
+}
+
+// ListStores returns the named stores that exist, sorted.
+func ListStores() ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(Root(), storesDir))
+	if errors.Is(err, os.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("reading stores: %w", err)
+	}
+
+	names := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir() {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+
+	return names, nil
 }
 
 // Load builds the configuration from defaults, then the file at path (when it

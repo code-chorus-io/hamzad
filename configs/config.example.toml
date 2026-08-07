@@ -13,8 +13,15 @@ chrome_path = ""
 # sharing a profile runs the same one. Leave empty to use whatever the host has.
 chrome_version = ""
 
-# Directory holding the profile store (a git repository). Defaults to
-# $XDG_CONFIG_HOME/hamzad (typically ~/.config/hamzad).
+# Which named store to use. Stores are separate git repositories under
+# $XDG_CONFIG_HOME/hamzad/stores/<name>, each with its own profiles, recipients
+# and session bundles — so a work set can be shared with colleagues while a
+# personal one stays private. Empty means "default".
+store = ""
+
+# Use a store at an explicit path instead, overriding `store`. The escape hatch
+# for a store kept outside the config root: a shared checkout, an encrypted
+# volume. Empty means derive the path from `store`.
 store_dir = ""
 
 # age or SSH private key used to decrypt secrets and session bundles.

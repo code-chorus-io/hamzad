@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 
 	"github.com/urfave/cli/v3"
 
@@ -26,6 +27,7 @@ func Command() *cli.Command {
 		Usage: "manage and share the profile store via git",
 		Commands: []*cli.Command{
 			initCommand(),
+			listCommand(),
 			syncCommand(),
 			statusCommand(),
 			recipientsCommand(),
@@ -139,6 +141,46 @@ func recipientCount(st *store.Store) int {
 	rs, _ := st.Recipients()
 
 	return len(rs)
+}
+
+// listCommand shows the named stores. Which one is active matters as much as
+// which exist, because every other command acts on it silently.
+func listCommand() *cli.Command {
+	return &cli.Command{
+		Name:    "list",
+		Aliases: []string{"ls"},
+		Usage:   "list the named stores",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			names, err := config.ListStores()
+			if err != nil {
+				return err
+			}
+
+			active := config.From(ctx).StoreDir
+			if len(names) == 0 {
+				fmt.Printf("no named stores yet — the active one is %s\n", active)
+				fmt.Println("create one with 'hamzad --store work store init'")
+
+				return nil
+			}
+
+			w := tabwriter.NewWriter(cmd.Root().Writer, 0, 4, 2, ' ', 0)
+			_, _ = fmt.Fprintln(w, "NAME\tPATH\tACTIVE")
+			for _, n := range names {
+				path, err := config.StorePath(n)
+				if err != nil {
+					continue
+				}
+				mark := "-"
+				if path == active {
+					mark = "yes"
+				}
+				_, _ = fmt.Fprintf(w, "%s\t%s\t%s\n", n, path, mark)
+			}
+
+			return w.Flush()
+		},
+	}
 }
 
 func syncCommand() *cli.Command {
