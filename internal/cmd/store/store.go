@@ -14,11 +14,16 @@ import (
 	"github.com/urfave/cli/v3"
 
 	"github.com/code-chorus-io/hamzad/internal/infra/config"
+	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
 // errRecipientRequired is returned by `recipients add` with no arguments.
 var errRecipientRequired = errors.New("provide at least one recipient key or file")
+
+// errReencryptFailed is returned when at least one artifact could not be
+// re-encrypted, so the command exits non-zero even though the rest succeeded.
+var errReencryptFailed = errors.New("some artifacts could not be re-encrypted")
 
 // Command returns the "store" command group.
 func Command() *cli.Command {
@@ -31,12 +36,18 @@ func Command() *cli.Command {
 			syncCommand(),
 			statusCommand(),
 			recipientsCommand(),
+			reencryptCommand(),
 		},
 	}
 }
 
 func storeFrom(ctx context.Context) *store.Store {
 	return store.New(config.From(ctx).StoreDir)
+}
+
+// cryptFor builds the crypt handle for a store from the configured identity.
+func cryptFor(ctx context.Context, st *store.Store) crypt.Crypt {
+	return crypt.New(st.RecipientsPath(), config.From(ctx).IdentityPath)
 }
 
 // resolveRecipients turns an argument that is either a key literal (age1…,
@@ -267,25 +278,94 @@ func recipientsCommand() *cli.Command {
 				Name:      "add",
 				Usage:     "add an age/ssh public key or a key file as a recipient",
 				ArgsUsage: "<key-or-file>...",
+				Flags: []cli.Flag{
+					&cli.BoolFlag{
+						Name:  "reencrypt",
+						Usage: "also re-encrypt existing secrets and bundles so the new recipients can read them",
+					},
+				},
 				Action: func(ctx context.Context, cmd *cli.Command) error {
 					args := cmd.Args().Slice()
 					if len(args) == 0 {
 						return errRecipientRequired
 					}
 
-					added, err := addRecipients(storeFrom(ctx), args)
+					st := storeFrom(ctx)
+					added, err := addRecipients(st, args)
 					if err != nil {
 						return err
 					}
 
 					fmt.Printf("added %d recipient(s)\n", added)
-					fmt.Println("re-encrypt existing secrets so new recipients can read them (re-run 'profile add --proxy' / 'profile push')")
 
-					return nil
+					if !cmd.Bool("reencrypt") {
+						fmt.Println("existing secrets and bundles are still encrypted to the previous recipients —")
+						fmt.Println("run 'store reencrypt' so the new ones can read them")
+
+						return nil
+					}
+
+					return reencrypt(ctx, st)
 				},
 			},
 		},
 	}
+}
+
+func reencryptCommand() *cli.Command {
+	return &cli.Command{
+		Name:  "reencrypt",
+		Usage: "re-encrypt every stored secret and session bundle to the current recipients",
+		Description: "age fixes the recipient set when a file is written, so keys added later cannot read\n" +
+			"anything already stored. This rewrites every secrets/<name>.age and data/<name>.tar.age\n" +
+			"to the current recipients.txt, using your identity to read them first.",
+		Action: func(ctx context.Context, cmd *cli.Command) error {
+			return reencrypt(ctx, storeFrom(ctx))
+		},
+	}
+}
+
+// reencrypt rewrites the store's artifacts to the current recipient list and
+// prints one line per artifact. An artifact the local identity cannot decrypt
+// is reported and skipped, and makes the command exit non-zero at the end — a
+// silent skip would look exactly like a successful share.
+func reencrypt(ctx context.Context, st *store.Store) error {
+	results, err := st.Reencrypt(cryptFor(ctx, st))
+	if err != nil {
+		return err
+	}
+	if len(results) == 0 {
+		fmt.Println("nothing to re-encrypt — the store holds no secrets or session bundles")
+
+		return nil
+	}
+
+	failed := 0
+	w := tabwriter.NewWriter(os.Stdout, 0, 4, 2, ' ', 0)
+	for _, r := range results {
+		if r.Err != nil {
+			failed++
+			_, _ = fmt.Fprintf(w, "  %s\t%s\tFAILED: %v\n", r.Kind, r.Name, r.Err)
+
+			continue
+		}
+		_, _ = fmt.Fprintf(w, "  %s\t%s\tok\n", r.Kind, r.Name)
+	}
+	if err := w.Flush(); err != nil {
+		return fmt.Errorf("writing report: %w", err)
+	}
+
+	rewritten := len(results) - failed
+	fmt.Printf("re-encrypted %d of %d artifact(s) to %d recipient(s)\n", rewritten, len(results), recipientCount(st))
+	if rewritten > 0 {
+		fmt.Println("run 'store sync' to share them — every rewritten bundle is committed whole")
+	}
+
+	if failed > 0 {
+		return fmt.Errorf("%w: %d artifact(s) your identity could not decrypt", errReencryptFailed, failed)
+	}
+
+	return nil
 }
 
 func orNone(s string) string {
