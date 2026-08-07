@@ -12,13 +12,18 @@ import (
 // Page.addScriptToEvaluateOnNewDocument to spoof the fingerprint signals that
 // have no CDP override. This is best-effort (Tier 2): the patches live in the
 // page's JS world and are detectable by sophisticated probes (worker re-reads,
-// Function.toString checks). CDP-native overrides in chrome.go are the reliable
-// layer; this covers the gaps a plain Chromium leaves open. Returns "" when the
-// fingerprint requests none of these patches.
+// Function.toString checks). The CDP-native overrides in launch_cdp.go are the
+// reliable layer; this covers the gaps a plain Chromium leaves open. Returns ""
+// when the fingerprint requests none of these patches.
+//
+// It only runs if the Page domain is enabled first: without Page.enable,
+// addScriptToEvaluateOnNewDocument returns a script identifier and then never
+// runs the script. See overrides(), which pairs the two.
 func patchScript(fp profile.Fingerprint) string {
-	// Always neutralize the automation tell first: chromedp's CDP attach sets
-	// navigator.webdriver to true, which trips bot checks (e.g. Google's
-	// sign-in block). A real, non-automated Chrome reports false.
+	// Pin the automation tell first. A plain Chrome driven this way already
+	// reports navigator.webdriver === false — nothing here sets it true — but a
+	// flag or an attaching automation client can flip it, and the cost of
+	// asserting the honest value is one getter.
 	parts := []string{defineNavigator("webdriver", false)}
 
 	// hardwareConcurrency is deliberately absent: it is set through CDP's

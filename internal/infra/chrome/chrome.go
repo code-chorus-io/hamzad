@@ -161,7 +161,9 @@ func launchClean(ctx context.Context, o Options, execPath, proxyArg string) erro
 }
 
 // cleanArgs assembles the minimal, human-looking flag set for a clean launch.
-// It deliberately omits the automation-flavored flags chromedp adds by default.
+// It deliberately omits the automation-flavored flags a driver library would
+// add by default (--enable-automation, --disable-extensions and friends), each
+// of which is its own tell.
 func cleanArgs(o Options, proxyArg string) []string {
 	args := []string{
 		"--user-data-dir=" + o.UserDataDir,
@@ -217,8 +219,8 @@ func proxyForLaunch(ctx context.Context, o Options) (string, func() error, error
 // clearSingletonLocks removes Chrome's ProcessSingleton files from a profile's
 // user-data-dir. They are symlinks (SingletonLock -> host-pid, plus the socket
 // and cookie); a browser that exits cleanly deletes them, but one killed with
-// SIGKILL cannot, orphaning them. It is a no-op for an empty dir (chromedp then
-// uses a fresh temp dir) or when the files are absent.
+// SIGKILL cannot, orphaning them. It is a no-op for an empty dir or when the
+// files are absent.
 func clearSingletonLocks(dir string) {
 	if dir == "" {
 		return

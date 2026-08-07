@@ -14,9 +14,9 @@ import (
 func TestExpectedConfigOmitsUnsetFields(t *testing.T) {
 	t.Parallel()
 
-	exp := expectedConfig(Options{Timezone: "Europe/Berlin"})
+	exp := expectedConfig(Options{Timezone: testTZ})
 
-	if got := exp["timezone"]; got != "Europe/Berlin" {
+	if got := exp["timezone"]; got != testTZ {
 		t.Errorf("timezone = %q, want Europe/Berlin", got)
 	}
 	// webdriver is always expected false because the launcher neutralizes it.

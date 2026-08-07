@@ -2,11 +2,11 @@ default:
     @just --list
 
 build:
-    @echo 'building koochooloologin'
-    go build -tags with_quic,with_wireguard -o koochooloologin ./cmd/koochooloologin
+    @echo 'building hamzad'
+    go build -tags with_quic,with_wireguard -o hamzad ./cmd/hamzad
 
 run *ARGS:
-    go run ./cmd/koochooloologin {{ ARGS }}
+    go run ./cmd/hamzad {{ ARGS }}
 
 test:
     go test -race -v ./... -covermode=atomic -coverprofile=coverage.out
@@ -18,7 +18,7 @@ tidy:
     go mod tidy
 
 update:
-    @cd ./cmd/koochooloologin && go get -u
+    @cd ./cmd/hamzad && go get -u
 
 # validate the release configuration
 release-check:

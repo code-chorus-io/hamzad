@@ -3,6 +3,7 @@ package config_test
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -18,11 +19,23 @@ const (
 // withConfigRoot points the config root at a temp dir. It cannot run in
 // parallel with anything: os.UserConfigDir reads the environment, which is
 // process-wide.
+//
+// Each platform is redirected by a different variable — XDG_CONFIG_HOME is only
+// consulted on Unix, while darwin derives the path from HOME and Windows from
+// AppData — so all three are set and the expected root is spelled out per
+// platform. Pinning XDG_CONFIG_HOME alone silently left these tests asserting
+// against the developer's real config directory everywhere but Linux.
 func withConfigRoot(t *testing.T) string {
 	t.Helper()
 
 	root := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", root)
+	t.Setenv("HOME", root)
+	t.Setenv("AppData", root)
+
+	if runtime.GOOS == "darwin" {
+		return filepath.Join(root, "Library", "Application Support", "hamzad")
+	}
 
 	return filepath.Join(root, "hamzad")
 }

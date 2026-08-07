@@ -46,8 +46,8 @@ func TestClearSingletonLocksRemovesOrphans(t *testing.T) {
 	}
 }
 
-// TestClearSingletonLocksEmptyDir is a no-op for an empty dir (chromedp then
-// allocates its own temp dir) and must not panic.
+// TestClearSingletonLocksEmptyDir is a no-op for an empty dir — a profile
+// without one has no locks to clear — and must not panic.
 func TestClearSingletonLocksEmptyDir(t *testing.T) {
 	t.Parallel()
 

@@ -8,8 +8,12 @@ import (
 	"github.com/code-chorus-io/hamzad/internal/domain/profile"
 )
 
-// testLang is the shared locale fixture for the launch assertions.
-const testLang = "de-DE"
+// Shared fixtures for the launch and override assertions.
+const (
+	testLang     = "de-DE"
+	testPlatform = "Win32"
+	testTZ       = "Europe/Berlin"
+)
 
 // TestCleanArgsNeverOpensDebugPort is the guardrail for the whole feature: the
 // default (clean) launch must never pass a remote-debugging flag, since an open
@@ -60,7 +64,7 @@ func TestCleanModeDropped(t *testing.T) {
 	}
 
 	o := Options{Fingerprint: profile.Fingerprint{
-		Platform:           "Win32",
+		Platform:           testPlatform,
 		AcceptLanguage:     testLang,
 		ScreenWidth:        1920,
 		ScreenHeight:       1080,
@@ -93,7 +97,7 @@ func TestCleanModeDroppedNamesFlagBackedOverrides(t *testing.T) {
 	t.Parallel()
 
 	for name, fp := range map[string]profile.Fingerprint{
-		platformKey:         {Platform: "Win32", UserAgent: "Mozilla/5.0 (Windows NT 10.0)"},
+		platformKey:         {Platform: testPlatform, UserAgent: "Mozilla/5.0 (Windows NT 10.0)"},
 		acceptLanguageLabel: {AcceptLanguage: "de-DE,de;q=0.9", Languages: []string{testLang}},
 		screenMetricsLabel:  {ScreenWidth: 1920, ScreenHeight: 1080},
 	} {

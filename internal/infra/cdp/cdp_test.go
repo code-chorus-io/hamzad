@@ -105,11 +105,12 @@ func (f *fakeBrowser) wsURL() string {
 
 // TestAttachNeverEnablesRuntime is the reason this package exists.
 //
-// chromedp calls Runtime.enable while attaching, to tell a worker target from a
-// page. Anti-bot services probe for exactly that — enabling the domain changes
-// observable behaviour in the page — and it cannot be switched off through
-// chromedp's API. Attaching here must not send it, nor enable any other domain,
-// because each one is another way to be noticed.
+// A general-purpose driver calls Runtime.enable while attaching, to tell a
+// worker target from a page. Anti-bot services probe for exactly that —
+// enabling the domain changes observable behaviour in the page — and it cannot
+// be switched off through those libraries' APIs. Attaching here must not send
+// it, nor enable any domain at all: the launcher enables Page later, once, and
+// only because the injected script does not run without it.
 func TestAttachNeverEnablesRuntime(t *testing.T) {
 	t.Parallel()
 
