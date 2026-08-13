@@ -46,15 +46,60 @@ func (r *Relay) Close() error {
 	return nil
 }
 
+// startAttempts bounds the retry below. Each attempt draws a fresh port, so
+// losing the race twice running is already remote; more attempts would only
+// delay reporting a port exhaustion that is not going to clear on its own.
+const startAttempts = 3
+
 // Start brings up a sing-box instance that listens for HTTP on loopback and
 // forwards through the given outbound.
 //
 // The port is chosen by binding one and releasing it, rather than asking
 // sing-box for an ephemeral port: its config takes a fixed listen_port, and the
 // caller needs the number to build Chrome's --proxy-server argument before the
-// browser starts. The race between release and rebind is a loopback-only,
-// same-process window, which is why it is acceptable here.
+// browser starts.
+//
+// That leaves a window between the release and sing-box's bind in which anything
+// on the machine can take the port — including a second profile opening at the
+// same moment, which is a thing this tool exists to do. Losing that race is
+// retried with a fresh port; every other failure is returned as-is, so a bad
+// outbound still fails on the first attempt.
 func Start(ctx context.Context, out Outbound) (*Relay, error) {
+	return startWithRetry(ctx, out, start)
+}
+
+// startWithRetry runs attempt until it succeeds, fails for a reason other than
+// a taken port, or runs out of tries. attempt is a parameter so the retry can be
+// tested without racing a real listener into the window it exists to cover.
+func startWithRetry(
+	ctx context.Context,
+	out Outbound,
+	attempt func(context.Context, Outbound) (*Relay, error),
+) (*Relay, error) {
+	var lost error
+	for range startAttempts {
+		relay, err := attempt(ctx, out)
+		if err == nil {
+			return relay, nil
+		}
+		if !isAddrInUse(err) {
+			return nil, err
+		}
+		lost = err
+	}
+
+	return nil, fmt.Errorf("%w after %d attempts: %w", errPortRace, startAttempts, lost)
+}
+
+// isAddrInUse reports whether err is the kernel refusing a bind because the
+// port is taken. sing-box wraps the failure several layers deep, but every
+// layer unwraps, so the syscall errno is still reachable.
+func isAddrInUse(err error) bool {
+	return errors.Is(err, errAddrInUse)
+}
+
+// start makes one attempt at bringing the relay up on a freshly chosen port.
+func start(ctx context.Context, out Outbound) (*Relay, error) {
 	port, err := freePort(ctx)
 	if err != nil {
 		return nil, err
@@ -127,6 +172,11 @@ func freePort(ctx context.Context) (int, error) {
 
 // errNotTCP is returned when the reserved listener is somehow not TCP.
 var errNotTCP = errors.New("reserved listener is not TCP")
+
+// errPortRace is returned when every attempt lost the port to another binder,
+// which points at something claiming loopback ports faster than we can use them
+// rather than at a transient collision.
+var errPortRace = errors.New("could not hold a loopback port for the proxy relay")
 
 // registryMu serializes include.Context.
 //
