@@ -18,7 +18,7 @@ require (
 	github.com/sagernet/sing v0.8.13
 	github.com/sagernet/sing-box v1.13.18
 	github.com/things-go/go-socks5 v0.1.1
-	github.com/urfave/cli/v3 v3.10.1
+	github.com/urfave/cli/v3 v3.11.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/sys v0.47.0
 	golang.org/x/term v0.45.0
