@@ -1,3 +1,4 @@
+---
 name: release
 on:
   push:
@@ -5,6 +6,11 @@ on:
 
 permissions:
   contents: read
+
+env:
+  # Keep in step with .goreleaser.yaml and test.yaml: the pre-release check has
+  # to compile the same tag-gated code the release binary contains.
+  BUILD_TAGS: with_quic,with_wireguard
 
 jobs:
   # The test workflow triggers on push-to-main and pull requests, so a tag push
@@ -16,7 +22,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
-      - run: go test -race ./...
+      - run: go test -race -tags "$BUILD_TAGS" ./...
 
   goreleaser:
     needs: [test]

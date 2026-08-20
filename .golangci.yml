@@ -1,5 +1,12 @@
 ---
 version: "2"
+run:
+  # sing-box gates the QUIC and WireGuard outbounds behind these tags, and the
+  # release binary is built with them. Without them here the linter never sees
+  # the code that actually ships.
+  build-tags:
+    - with_quic
+    - with_wireguard
 linters:
   default: all
   disable:
@@ -11,6 +18,7 @@ linters:
     - wsl            # whitespace cop produces too much churn for too little signal
     - wsl_v5         # ditto for the v5 rewrite
     - exhaustruct    # zero-valued config/option structs are intentional here
+    - exhaustruct_v5 # ditto for the v5 rewrite
     - forbidigo      # this is a CLI; printing results to stdout via fmt is the point
     - mnd            # timeouts and tabwriter/SplitN params read fine as literals
     - gochecknoglobals # package-level lookup tables and cli command factories are intentional

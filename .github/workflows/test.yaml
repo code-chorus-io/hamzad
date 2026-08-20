@@ -8,6 +8,18 @@ on:
 permissions:
   contents: read
 
+# A new push to a PR makes the run in flight pointless; only main's history is
+# worth keeping every run of.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+env:
+  # QUIC and WireGuard outbounds sit behind sing-box build tags and the release
+  # binary is built with them (see .goreleaser.yaml). CI has to compile the same
+  # code, or a break in a tag-gated path only surfaces at release time.
+  BUILD_TAGS: with_quic,with_wireguard
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -18,7 +30,11 @@ jobs:
           go-version-file: "go.mod"
       - uses: golangci/golangci-lint-action@v9
         with:
-          version: latest
+          # Pinned, not "latest": with default:all in .golangci.yml, a
+          # golangci-lint release that adds a linter reds main with no change
+          # of ours. Bump this deliberately. Build tags come from run.build-tags
+          # in .golangci.yml so `just lint` matches CI.
+          version: v2.13.0
           args: --timeout=5m
 
   test:
@@ -28,7 +44,9 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
-      - run: go test -race ./... -covermode=atomic -coverprofile=coverage.out
+      - run: >-
+          go test -race -tags "$BUILD_TAGS" ./...
+          -covermode=atomic -coverprofile=coverage.out
       - uses: codecov/codecov-action@v7
         with:
           files: coverage.out
@@ -42,4 +60,4 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
-      - run: go build -o hamzad ./cmd/hamzad
+      - run: go build -tags "$BUILD_TAGS" -o hamzad ./cmd/hamzad

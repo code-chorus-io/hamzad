@@ -9,7 +9,7 @@ run *ARGS:
     go run ./cmd/hamzad {{ ARGS }}
 
 test:
-    go test -race -v ./... -covermode=atomic -coverprofile=coverage.out
+    go test -race -v -tags with_quic,with_wireguard ./... -covermode=atomic -coverprofile=coverage.out
 
 lint:
     golangci-lint run -c .golangci.yml
