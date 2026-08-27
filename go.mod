@@ -3,7 +3,7 @@ module github.com/code-chorus-io/hamzad
 go 1.26.5
 
 require (
-	charm.land/bubbles/v2 v2.1.1
+	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.0.9
 	charm.land/lipgloss/v2 v2.0.6
 	filippo.io/age v1.3.1
@@ -15,9 +15,9 @@ require (
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/structs v1.0.1
 	github.com/knadh/koanf/v2 v2.3.6
-	github.com/sagernet/sing v0.8.13
+	github.com/sagernet/sing v0.8.14
 	github.com/sagernet/sing-box v1.13.19
-	github.com/things-go/go-socks5 v0.1.1
+	github.com/things-go/go-socks5 v0.1.3
 	github.com/urfave/cli/v3 v3.11.0
 	golang.org/x/crypto v0.55.0
 	golang.org/x/sys v0.47.0
