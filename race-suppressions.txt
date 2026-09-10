@@ -1,0 +1,19 @@
+# Race detector suppressions: one `race:<function>` line per known upstream
+# report, each with the reason it is not ours to fix.
+#
+# GORACE resolves this path relative to the process working directory, and
+# `go test ./...` runs every package's binary in that package's own directory.
+# So both the justfile and CI pass an absolute path built from the repo root
+# rather than naming the file directly.
+
+# route.NetworkManager.started is a plain bool. Start() writes it in the
+# post-start stage (route/network.go:220) while the goroutine that
+# notifyInterfaceUpdate spawns in the initialize stage reads it
+# (route/network.go:574), and starting the interface monitor fires that callback
+# straight away — so every Box.Start on a host with a default route trips it.
+#
+# Nothing in our config avoids this: NewNetworkManager builds the monitor
+# unconditionally on Linux, and `auto_detect_interface` only makes it mandatory
+# rather than optional. Confirmed still present in v1.15.0-alpha.2, so there is
+# no version to upgrade to. Drop this line once sing-box guards the field.
+race:sing-box/route.(*NetworkManager).updateInterface

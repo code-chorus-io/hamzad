@@ -44,9 +44,15 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
+      # GORACE wants an absolute path, and `go test ./...` runs each package's
+      # binary in that package's directory, so a relative path would resolve to
+      # a different (missing) file per package and be silently ignored. See
+      # race-suppressions.txt for what is suppressed and why.
       - run: >-
           go test -race -tags "$BUILD_TAGS" ./...
           -covermode=atomic -coverprofile=coverage.out
+        env:
+          GORACE: suppressions=${{ github.workspace }}/race-suppressions.txt
       - uses: codecov/codecov-action@v7
         with:
           files: coverage.out
