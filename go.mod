@@ -20,7 +20,7 @@ require (
 	github.com/things-go/go-socks5 v0.1.3
 	github.com/urfave/cli/v3 v3.11.0
 	golang.org/x/crypto v0.56.0
-	golang.org/x/sys v0.47.0
+	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.45.0
 )
 
