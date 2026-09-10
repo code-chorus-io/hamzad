@@ -8,8 +8,12 @@ build:
 run *ARGS:
     go run ./cmd/hamzad {{ ARGS }}
 
+# GORACE needs an absolute path: `go test ./...` runs each package's binary in
+# that package's directory, so a relative suppressions path resolves to a
+# different (missing) file per package and is silently ignored.
 test:
-    go test -race -v -tags with_quic,with_wireguard ./... -covermode=atomic -coverprofile=coverage.out
+    GORACE="suppressions={{ justfile_directory() }}/race-suppressions.txt" \
+        go test -race -v -tags with_quic,with_wireguard ./... -covermode=atomic -coverprofile=coverage.out
 
 lint:
     golangci-lint run -c .golangci.yml
