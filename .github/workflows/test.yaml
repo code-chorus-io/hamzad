@@ -34,7 +34,7 @@ jobs:
           # golangci-lint release that adds a linter reds main with no change
           # of ours. Bump this deliberately. Build tags come from run.build-tags
           # in .golangci.yml so `just lint` matches CI.
-          version: v2.13.0
+          version: v2.13.2
           args: --timeout=5m
 
   test:
