@@ -22,7 +22,11 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version-file: "go.mod"
+      # Same race suppressions as test.yaml, so a tag cannot red on the
+      # upstream race that main already tolerates.
       - run: go test -race -tags "$BUILD_TAGS" ./...
+        env:
+          GORACE: suppressions=${{ github.workspace }}/race-suppressions.txt
 
   goreleaser:
     needs: [test]
