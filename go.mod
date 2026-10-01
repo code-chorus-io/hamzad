@@ -15,7 +15,7 @@ require (
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/structs v1.0.1
 	github.com/knadh/koanf/v2 v2.3.7
-	github.com/sagernet/sing v0.9.6-0.20260922013354-87c33f17688f
+	github.com/sagernet/sing v0.9.6
 	github.com/sagernet/sing-box v1.14.2
 	github.com/things-go/go-socks5 v0.1.3
 	github.com/urfave/cli/v3 v3.13.0
