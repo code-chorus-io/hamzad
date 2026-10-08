@@ -11,14 +11,14 @@ require (
 	github.com/carlmjohnson/versioninfo v0.22.5
 	github.com/coder/websocket v1.8.15
 	github.com/knadh/koanf/parsers/toml/v2 v2.2.2
-	github.com/knadh/koanf/providers/env/v2 v2.0.1
+	github.com/knadh/koanf/providers/env/v2 v2.0.2
 	github.com/knadh/koanf/providers/file v1.2.1
 	github.com/knadh/koanf/providers/structs v1.0.1
-	github.com/knadh/koanf/v2 v2.3.7
+	github.com/knadh/koanf/v2 v2.3.8
 	github.com/sagernet/sing v0.9.6
 	github.com/sagernet/sing-box v1.14.2
 	github.com/things-go/go-socks5 v0.1.3
-	github.com/urfave/cli/v3 v3.13.0
+	github.com/urfave/cli/v3 v3.14.0
 	golang.org/x/crypto v0.57.0
 	golang.org/x/sys v0.48.0
 	golang.org/x/term v0.46.0
