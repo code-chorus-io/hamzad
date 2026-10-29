@@ -57,6 +57,12 @@ hamzad profile open work --auto-geo --cdp-port 9222
 
 hamzad profile list
 hamzad profile show work
+
+# change only what you name; '' clears a text setting
+hamzad profile edit work --timezone America/Chicago --notes ''
+hamzad profile edit work --proxy 'http://user:pass@5.6.7.8:8080'
+hamzad profile edit work --geo '41.70,-88.19'   # or --geo '' to clear it
+
 hamzad profile remove work --purge
 ```
 
@@ -107,7 +113,9 @@ The store is a git repository. Secrets and session state are **encrypted with [a
 | `data/<name>.tar.age` | yes, encrypted | Chrome user-data-dir minus caches (cookies, storage, logins) |
 | `data/<name>/` | **gitignored** | the local, unencrypted working copy |
 
-Encrypting needs only the **public** recipients, so `add`/`push` never touch your private key. Only **decrypting** — `open`, `pull`, `show --reveal` — uses your identity (`~/.ssh/id_ed25519` by default; override with `--identity`).
+Encrypting needs only the **public** recipients, so `add`/`edit`/`push` never touch your private key. Only **decrypting** — `open`, `pull`, `show --reveal` — uses your identity (`~/.ssh/id_ed25519` by default; override with `--identity`).
+
+An SSH key with a passphrase is asked for it once per command, however many files that command decrypts, and a mistyped passphrase gets three tries. With no terminal attached — a launcher, a script, an agent — set `askpass` (`HAMZAD_ASKPASS`, `--askpass`) to a program that prints the passphrase; it is run with the prompt as its argument, like `SSH_ASKPASS`.
 
 The bundle deliberately leaves out Chrome's caches — `Cache`, `Code Cache`, `GPUCache`, the shader and Service-Worker caches. Chrome rebuilds them on next launch and none of them carries any part of the identity being shared, but they dominate a profile's size: a real signed-in profile measured 197 MB packed with them and 66 MB without. That matters because the bundle is encrypted, so it is incompressible and git cannot delta two revisions — every `profile push` commits the whole file again, against GitHub's 50 MB warning and 100 MB hard block. If a profile still outgrows the limit, put `data/*.age` behind [Git LFS](https://git-lfs.com).
 
@@ -126,7 +134,9 @@ hamzad store status
 
 A teammate clones the repo, runs `store sync`, then `profile open work` — their copy decrypts the proxy and the session bundle and resumes the account.
 
-`profile push` / `profile pull` explicitly re-encrypt / restore a session bundle; `open` does both automatically (restore before launch, save on exit — disable with `--no-restore` / `--no-save`).
+`profile push` / `profile pull` explicitly re-encrypt / restore a session bundle; `open` does both automatically (restore before launch, save on exit — disable with `--no-restore` / `--no-save`). `open --sync` also runs `store sync` once the session is saved, so it reaches the remote without a second command.
+
+A session ends when Chrome exits: close its window, or on macOS **quit** it (⌘Q), since closing the last window there leaves Chrome running. Ctrl-C in the terminal works too. Either way Chrome is asked to quit, not killed, so it writes cookies and storage to disk before the bundle is packed; only a browser that has not exited after 15 seconds is killed.
 
 `open` only restores a bundle when there is **no local working copy**, since unpacking replaces the directory outright and the local copy may hold newer browsing. So after pulling a teammate's newer session for a profile you have already opened, `open` keeps yours and says so — run `profile pull <name>` to take theirs.
 
