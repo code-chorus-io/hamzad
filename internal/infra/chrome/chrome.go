@@ -88,13 +88,13 @@ func Launch(ctx context.Context, o Options) error {
 		return err
 	}
 
-	// Chrome is force-killed (SIGKILL) when ctx is cancelled — which is how the
-	// TUI closes a session and how Ctrl-C ends the CLI — so it never runs its own
-	// cleanup and leaves the ProcessSingleton lock files behind. On the next
-	// launch of the same profile Chrome would see them, assume another browser
-	// owns the user-data-dir, hand off, and exit ("Opening in existing browser
-	// session."). Only one browser ever owns a profile dir at a time, so any lock
-	// we find here is stale; clear it before launching.
+	// A browser that was killed — a crash, or one that outlived shutdownGrace
+	// after the session was cancelled — never runs its own cleanup and leaves the
+	// ProcessSingleton lock files behind. On the next launch of the same profile
+	// Chrome would see them, assume another browser owns the user-data-dir, hand
+	// off, and exit ("Opening in existing browser session."). Only one browser
+	// ever owns a profile dir at a time, so any lock we find here is stale; clear
+	// it before launching.
 	clearSingletonLocks(o.UserDataDir)
 
 	// Advisory: a profile that cannot get its bookmark bar is still perfectly
@@ -137,6 +137,7 @@ func launchClean(ctx context.Context, o Options, execPath, proxyArg string) erro
 	// execPath is the operator-configured browser binary and the args are derived
 	// from the user's own profile, so this is not untrusted input.
 	cmd := exec.CommandContext(ctx, execPath, cleanArgs(o, proxyArg)...) //nolint:gosec // G204: operator-controlled browser + own profile
+	stopGracefully(cmd)
 	cmd.Env = os.Environ()
 	if o.Timezone != "" {
 		cmd.Env = append(cmd.Env, "TZ="+o.Timezone)
@@ -147,8 +148,8 @@ func launchClean(ctx context.Context, o Options, execPath, proxyArg string) erro
 	}
 
 	err := cmd.Wait()
-	// A ctx cancellation (Ctrl-C or the TUI closing the session) kills Chrome,
-	// which surfaces here as a signal-kill error; that is the normal way a
+	// A ctx cancellation (Ctrl-C or the TUI closing the session) stops Chrome,
+	// which can surface here as a signal error; that is the normal way a
 	// session ends, not a failure.
 	if ctx.Err() != nil {
 		return nil //nolint:nilerr // ctx-cancel kill is a normal session end, not an error

@@ -122,6 +122,7 @@ func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error 
 
 	//nolint:gosec // G204: operator-controlled browser binary and the user's own profile
 	cmd := exec.CommandContext(ctx, execPath, args...)
+	stopGracefully(cmd)
 	cmd.Env = os.Environ()
 	if o.Timezone != "" {
 		cmd.Env = append(cmd.Env, "TZ="+o.Timezone)
@@ -141,7 +142,7 @@ func launchCDP(ctx context.Context, o Options, execPath, proxyArg string) error 
 	defer func() { _ = client.Close() }()
 
 	err = cmd.Wait()
-	// A ctx-cancel kill is how a session normally ends, not a failure.
+	// A ctx-cancel stop is how a session normally ends, not a failure.
 	if ctx.Err() != nil {
 		return nil
 	}
