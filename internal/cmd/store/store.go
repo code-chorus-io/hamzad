@@ -45,9 +45,14 @@ func storeFrom(ctx context.Context) *store.Store {
 	return store.New(config.From(ctx).StoreDir)
 }
 
-// cryptFor builds the crypt handle for a store from the configured identity.
+// cryptFor builds the crypt handle for a store from the configured identity. Its
+// prompt remembers the passphrase, so a command asks for it at most once.
 func cryptFor(ctx context.Context, st *store.Store) crypt.Crypt {
-	return crypt.New(st.RecipientsPath(), config.From(ctx).IdentityPath)
+	cfg := config.From(ctx)
+	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
+	c.Prompt = crypt.TerminalPrompt(cfg.IdentityPath, cfg.Askpass)
+
+	return c
 }
 
 // resolveRecipients turns an argument that is either a key literal (age1…,

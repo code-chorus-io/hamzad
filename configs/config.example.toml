@@ -28,3 +28,8 @@ store_dir = ""
 # Encryption only needs the public recipients in the store; only decryption
 # (open, pull, show --reveal) uses this key. Defaults to ~/.ssh/id_ed25519.
 identity_path = ""
+
+# Program that prints the passphrase of an encrypted SSH identity, run with the
+# prompt as its only argument (like SSH_ASKPASS). Lets hamzad unlock the key
+# when no terminal is attached. Empty means ask on the terminal.
+askpass = ""

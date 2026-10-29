@@ -18,7 +18,6 @@ import (
 	"filippo.io/age/agessh"
 	"filippo.io/age/armor"
 	"golang.org/x/crypto/ssh"
-	"golang.org/x/term"
 )
 
 // ErrWrongPassphrase is returned by CheckSSHPassphrase when the passphrase does
@@ -42,7 +41,8 @@ type Crypt struct {
 	RecipientsPath string
 	IdentityPath   string
 	// Prompt reads a passphrase for an encrypted SSH identity. When nil, the
-	// controlling terminal is used.
+	// controlling terminal is used, with no memory between decrypts — set it to
+	// a TerminalPrompt to ask once per command.
 	Prompt func(prompt string) ([]byte, error)
 }
 
@@ -297,12 +297,5 @@ func (c Crypt) askPassphrase(prompt string) ([]byte, error) {
 		return c.Prompt(prompt)
 	}
 
-	fmt.Fprint(os.Stderr, prompt)
-	pass, err := term.ReadPassword(int(os.Stdin.Fd()))
-	fmt.Fprintln(os.Stderr)
-	if err != nil {
-		return nil, fmt.Errorf("reading passphrase: %w", err)
-	}
-
-	return pass, nil
+	return TerminalPrompt(c.IdentityPath, "")(prompt)
 }

@@ -60,10 +60,10 @@ type Fingerprint struct {
 	Platform           string   `json:"platform,omitempty"             koanf:"platform"             toml:"platform,omitempty"`
 	AcceptLanguage     string   `json:"accept_language,omitempty"      koanf:"accept_language"      toml:"accept_language,omitempty"`
 	Languages          []string `json:"languages,omitempty"            koanf:"languages"            toml:"languages,omitempty"`
-	ScreenWidth        int      `json:"screen_width,omitempty"         koanf:"screen_width"         toml:"screen_width,omitempty"`
-	ScreenHeight       int      `json:"screen_height,omitempty"        koanf:"screen_height"        toml:"screen_height,omitempty"`
-	HardwareConcurrent int      `json:"hardware_concurrency,omitempty" koanf:"hardware_concurrency" toml:"hardware_concurrency,omitempty"`
-	DeviceMemory       int      `json:"device_memory,omitempty"        koanf:"device_memory"        toml:"device_memory,omitempty"`
+	ScreenWidth        int      `json:"screen_width,omitempty"         koanf:"screen_width"         toml:"screen_width,omitzero"`
+	ScreenHeight       int      `json:"screen_height,omitempty"        koanf:"screen_height"        toml:"screen_height,omitzero"`
+	HardwareConcurrent int      `json:"hardware_concurrency,omitempty" koanf:"hardware_concurrency" toml:"hardware_concurrency,omitzero"`
+	DeviceMemory       int      `json:"device_memory,omitempty"        koanf:"device_memory"        toml:"device_memory,omitzero"`
 	WebGLVendor        string   `json:"webgl_vendor,omitempty"         koanf:"webgl_vendor"         toml:"webgl_vendor,omitempty"`
 	WebGLRenderer      string   `json:"webgl_renderer,omitempty"       koanf:"webgl_renderer"       toml:"webgl_renderer,omitempty"`
 	CanvasNoise        bool     `json:"canvas_noise,omitempty"         koanf:"canvas_noise"         toml:"canvas_noise,omitempty"`
@@ -76,7 +76,7 @@ type Fingerprint struct {
 type LatLng struct {
 	Latitude  float64 `json:"latitude"           koanf:"latitude"  toml:"latitude"`
 	Longitude float64 `json:"longitude"          koanf:"longitude" toml:"longitude"`
-	Accuracy  float64 `json:"accuracy,omitempty" koanf:"accuracy"  toml:"accuracy,omitempty"`
+	Accuracy  float64 `json:"accuracy,omitempty" koanf:"accuracy"  toml:"accuracy,omitzero"`
 }
 
 // Validate reports whether the profile is well-formed. It checks the name
