@@ -46,6 +46,11 @@ type Config struct {
 	// IdentityPath is the age or SSH private key used to decrypt secrets and
 	// session bundles. Encryption never needs it — only decryption does.
 	IdentityPath string `json:"identity_path" koanf:"identity_path"`
+	// Askpass is a program that prints the passphrase of an encrypted SSH
+	// identity, run with the prompt as its argument, in the manner of
+	// SSH_ASKPASS. It is how a run with no terminal attached — a launcher, a
+	// script, an agent — unlocks the key. Empty means ask on the terminal.
+	Askpass string `json:"askpass" koanf:"askpass"`
 }
 
 // Default returns the hardcoded configuration defaults.
@@ -58,6 +63,7 @@ func Default() Config {
 		// pick the path from Store instead.
 		StoreDir:     "",
 		IdentityPath: defaultIdentityPath(),
+		Askpass:      "",
 	}
 }
 

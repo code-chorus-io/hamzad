@@ -75,6 +75,11 @@ func rootFlags() []cli.Flag {
 			Usage:   "age or SSH private key used to decrypt secrets and bundles",
 			Sources: cli.EnvVars(config.EnvPrefix + "IDENTITY"),
 		},
+		&cli.StringFlag{
+			Name:    "askpass",
+			Usage:   "program that prints the SSH key's passphrase, for runs without a terminal",
+			Sources: cli.EnvVars(config.EnvPrefix + "ASKPASS"),
+		},
 	}
 }
 
@@ -100,6 +105,9 @@ func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) 
 	}
 	if cmd.IsSet("identity") {
 		cfg.IdentityPath = cmd.String("identity")
+	}
+	if cmd.IsSet("askpass") {
+		cfg.Askpass = cmd.String("askpass")
 	}
 
 	// Resolve last: the store name only becomes a path once the file, the
