@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"runtime"
 	"time"
 
 	"github.com/urfave/cli/v3"
@@ -33,6 +34,7 @@ func openCommand() *cli.Command {
 			&cli.IntFlag{Name: "cdp-port", Usage: "fix the remote-debugging port so automation tools can attach"},
 			&cli.BoolFlag{Name: "no-restore", Usage: "do not decrypt the shared session bundle before launch"},
 			&cli.BoolFlag{Name: "no-save", Usage: "do not re-encrypt the session bundle after the browser closes"},
+			&cli.BoolFlag{Name: "sync", Usage: "run 'store sync' after the session is saved, sharing it with the remote"},
 		},
 		Action: openAction,
 	}
@@ -56,22 +58,56 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	// Tie the browser lifetime to Ctrl-C as well as window close.
-	ctx, stop := signal.NotifyContext(ctx, os.Interrupt)
+	// Tie the browser lifetime to Ctrl-C as well as window close. The session
+	// gets its own context because Ctrl-C cancels it, and the save and sync that
+	// follow must still run.
+	session, stop := signal.NotifyContext(ctx, os.Interrupt)
 	defer stop()
 
 	if opts.DebugPort > 0 {
-		go announceCDP(ctx, opts.DebugPort)
+		go announceCDP(session, opts.DebugPort)
 	} else if dropped := chrome.CleanModeDropped(opts); dropped != "" {
 		fmt.Printf("note: %s not applied on the clean (no-CDP) launch — use --cdp-port to enable them\n", dropped)
 	}
 
-	fmt.Printf("launching %q — close the browser window or press Ctrl-C to end the session\n", name)
-	if err := chrome.Launch(ctx, opts); err != nil {
+	fmt.Printf("launching %q — %s or press Ctrl-C to end the session\n", name, quitHint())
+	if err := chrome.Launch(session, opts); err != nil {
 		return err
 	}
 
-	return saveSession(cmd, st, c, name)
+	saved, err := saveSession(cmd, st, c, name)
+	if err != nil || !saved || !cmd.Bool("sync") {
+		return err
+	}
+
+	return syncSession(ctx, st, name)
+}
+
+// quitHint says how to end a session from the browser itself. On macOS closing
+// the last window leaves Chrome running, so the session would never end; only
+// Quit does that.
+func quitHint() string {
+	if runtime.GOOS == "darwin" {
+		return "quit the browser (⌘Q; closing the window is not enough)"
+	}
+
+	return "close the browser window"
+}
+
+// syncSession shares a just-saved session: commit, pull --rebase, push.
+func syncSession(ctx context.Context, st *store.Store, name string) error {
+	fmt.Println("syncing the store…")
+	if err := st.Sync(ctx, name+": update session"); err != nil {
+		return err
+	}
+
+	if st.Remote(ctx) == "" {
+		fmt.Println("synced locally (no remote configured — set one with 'store init --remote')")
+	} else {
+		fmt.Println("session shared with the remote")
+	}
+
+	return nil
 }
 
 // restoreSession decrypts the shared bundle over the working directory, unless
@@ -98,20 +134,25 @@ func restoreSession(st *store.Store, c crypt.Crypt, name string, disabled bool) 
 }
 
 // saveSession re-encrypts the working data into the shared bundle after a
-// session ends, unless disabled or encryption is not configured.
-func saveSession(cmd *cli.Command, st *store.Store, c crypt.Crypt, name string) error {
+// session ends, unless disabled or encryption is not configured. It reports
+// whether a bundle was written.
+func saveSession(cmd *cli.Command, st *store.Store, c crypt.Crypt, name string) (bool, error) {
 	if cmd.Bool("no-save") || !c.Configured() {
-		return nil
+		return false, nil
 	}
 
 	fmt.Printf("saving encrypted session for %q…\n", name)
 	if err := st.PackBundle(c, name); err != nil {
-		return err
+		return false, err
 	}
 
-	fmt.Println("session saved — run 'store sync' to share it")
+	if cmd.Bool("sync") {
+		fmt.Println("session saved")
+	} else {
+		fmt.Println("session saved — run 'store sync' to share it, or pass --sync next time")
+	}
 
-	return nil
+	return true, nil
 }
 
 // openOptions resolves a profile into launch options, decrypting its proxy and
