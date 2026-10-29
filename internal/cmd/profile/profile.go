@@ -30,6 +30,12 @@ var errInvalidScreen = errors.New("invalid screen (want WxH, e.g. 1920x1080)")
 // recipients exist yet.
 var errEncNotConfigured = errors.New("encryption not configured; run 'store init' to add your key first")
 
+// errInvalidGeo is returned when a --geo value is not LAT,LNG.
+var errInvalidGeo = errors.New("invalid geolocation (want LAT,LNG, e.g. 41.70,-88.19)")
+
+// errProxyConflict is returned when edit is asked to both set and drop a proxy.
+var errProxyConflict = errors.New("--proxy and --no-proxy are mutually exclusive")
+
 // errNoBundle is returned when a session bundle is expected but absent.
 var errNoBundle = errors.New("no session bundle")
 
@@ -44,6 +50,7 @@ func Command() *cli.Command {
 		Usage:   "manage browser profiles",
 		Commands: []*cli.Command{
 			addCommand(),
+			editCommand(),
 			listCommand(),
 			showCommand(),
 			openCommand(),
@@ -60,9 +67,14 @@ func storeFrom(ctx context.Context) *store.Store {
 	return store.New(config.From(ctx).StoreDir)
 }
 
-// cryptFor builds the crypt handle for a store from the configured identity.
+// cryptFor builds the crypt handle for a store from the configured identity. Its
+// prompt remembers the passphrase, so a command asks for it at most once.
 func cryptFor(ctx context.Context, st *store.Store) crypt.Crypt {
-	return crypt.New(st.RecipientsPath(), config.From(ctx).IdentityPath)
+	cfg := config.From(ctx)
+	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
+	c.Prompt = crypt.TerminalPrompt(cfg.IdentityPath, cfg.Askpass)
+
+	return c
 }
 
 // fingerprintFlags are shared by add so a profile's fingerprint can be set at
@@ -91,34 +103,53 @@ func fingerprintFlags() []cli.Flag {
 	}
 }
 
-// applyFlags populates a profile from the flags set on cmd.
+// applyFlags writes the flags set on cmd into a profile and leaves every other
+// field alone, so it serves both add (onto an empty profile) and edit (onto a
+// stored one, changing only what was named).
 func applyFlags(p *domain.Profile, cmd *cli.Command) error {
-	p.Proxy = cmd.String("proxy")
-	p.Timezone = cmd.String("timezone")
-	p.StartURL = cmd.String("start-url")
-	p.Notes = cmd.String("notes")
+	setString(cmd, "proxy", &p.Proxy)
+	setString(cmd, "timezone", &p.Timezone)
+	setString(cmd, "start-url", &p.StartURL)
+	setString(cmd, "notes", &p.Notes)
 
 	fp := &p.Fingerprint
-	fp.UserAgent = cmd.String("user-agent")
-	fp.Platform = cmd.String("platform")
-	fp.AcceptLanguage = cmd.String("accept-language")
-	fp.Languages = cmd.StringSlice("lang")
-	fp.HardwareConcurrent = cmd.Int("hardware-concurrency")
-	fp.DeviceMemory = cmd.Int("device-memory")
-	fp.WebGLVendor = cmd.String("webgl-vendor")
-	fp.WebGLRenderer = cmd.String("webgl-renderer")
-	fp.CanvasNoise = cmd.Bool("canvas-noise")
-	fp.WebRTCMode = cmd.String("webrtc-mode")
+	setString(cmd, "user-agent", &fp.UserAgent)
+	setString(cmd, "platform", &fp.Platform)
+	setString(cmd, "accept-language", &fp.AcceptLanguage)
+	if cmd.IsSet("lang") {
+		fp.Languages = cmd.StringSlice("lang")
+	}
+	if cmd.IsSet("hardware-concurrency") {
+		fp.HardwareConcurrent = cmd.Int("hardware-concurrency")
+	}
+	if cmd.IsSet("device-memory") {
+		fp.DeviceMemory = cmd.Int("device-memory")
+	}
+	setString(cmd, "webgl-vendor", &fp.WebGLVendor)
+	setString(cmd, "webgl-renderer", &fp.WebGLRenderer)
+	if cmd.IsSet("canvas-noise") {
+		fp.CanvasNoise = cmd.Bool("canvas-noise")
+	}
+	setString(cmd, "webrtc-mode", &fp.WebRTCMode)
 
-	if s := cmd.String("screen"); s != "" {
-		w, h, err := parseScreen(s)
-		if err != nil {
-			return err
+	if cmd.IsSet("screen") {
+		fp.ScreenWidth, fp.ScreenHeight = 0, 0
+		if s := cmd.String("screen"); s != "" {
+			w, h, err := parseScreen(s)
+			if err != nil {
+				return err
+			}
+			fp.ScreenWidth, fp.ScreenHeight = w, h
 		}
-		fp.ScreenWidth, fp.ScreenHeight = w, h
 	}
 
 	return nil
+}
+
+func setString(cmd *cli.Command, flag string, dst *string) {
+	if cmd.IsSet(flag) {
+		*dst = cmd.String(flag)
+	}
 }
 
 func parseScreen(s string) (int, int, error) {
@@ -189,6 +220,117 @@ func addCommand() *cli.Command {
 			return nil
 		},
 	}
+}
+
+func editCommand() *cli.Command {
+	flags := append(fingerprintFlags(),
+		&cli.BoolFlag{Name: "no-proxy", Usage: "remove the profile's proxy, making it direct"},
+		&cli.StringFlag{Name: "geo", Usage: "pin geolocation as LAT,LNG (empty clears it); 'profile geo' derives it from the proxy instead"},
+	)
+
+	return &cli.Command{
+		Name:  "edit",
+		Usage: "change a profile's settings; only the flags given are touched",
+		Description: "Pass an empty value to clear a text setting, e.g. --notes ''. " +
+			"Setting the proxy needs only the store's recipients, never your private key.",
+		ArgsUsage: argName,
+		Flags:     flags,
+		Action:    editAction,
+	}
+}
+
+func editAction(ctx context.Context, cmd *cli.Command) error {
+	name := cmd.Args().First()
+	if name == "" {
+		return errNameRequired
+	}
+	if cmd.IsSet("proxy") && cmd.Bool("no-proxy") {
+		return errProxyConflict
+	}
+
+	st := storeFrom(ctx)
+	p, err := st.Get(name)
+	if err != nil {
+		return err
+	}
+	if err := applyEdit(&p, cmd); err != nil {
+		return err
+	}
+
+	c := cryptFor(ctx, st)
+	if p.Proxy != "" && !c.Configured() {
+		return errEncNotConfigured
+	}
+
+	if err := applyProxyChange(cmd, st, c, p); err != nil {
+		return err
+	}
+	if err := st.Put(p); err != nil {
+		return err
+	}
+
+	fmt.Printf("updated profile %q\n", name)
+
+	return nil
+}
+
+// applyEdit applies edit's flags to p and checks the result, so a bad flag is
+// rejected before anything is written and cannot leave the proxy changed and
+// the rest of the profile not.
+func applyEdit(p *domain.Profile, cmd *cli.Command) error {
+	if err := applyFlags(p, cmd); err != nil {
+		return err
+	}
+	if cmd.IsSet("geo") {
+		geo, err := parseGeo(cmd.String("geo"))
+		if err != nil {
+			return err
+		}
+		p.Fingerprint.Geolocation = geo
+	}
+	if p.Proxy != "" {
+		if _, err := proxy.ParseSpec(p.Proxy); err != nil {
+			return err
+		}
+	}
+
+	return p.Validate()
+}
+
+// applyProxyChange stores, replaces or drops the encrypted proxy as edit's
+// flags ask, and leaves it alone when they do not mention it.
+func applyProxyChange(cmd *cli.Command, st *store.Store, c crypt.Crypt, p domain.Profile) error {
+	switch {
+	case cmd.Bool("no-proxy"), cmd.IsSet("proxy") && p.Proxy == "":
+		return st.ClearProxy(p.Name)
+	case cmd.IsSet("proxy"):
+		return st.SetProxy(c, p.Name, p.Proxy)
+	default:
+		return nil
+	}
+}
+
+// parseGeo reads LAT,LNG; an empty value clears the override.
+func parseGeo(s string) (*domain.LatLng, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil //nolint:nilnil // no override is the valid answer to an empty value
+	}
+
+	lat, lng, ok := strings.Cut(s, ",")
+	if !ok {
+		return nil, fmt.Errorf("%w: %q", errInvalidGeo, s)
+	}
+
+	la, err := strconv.ParseFloat(strings.TrimSpace(lat), 64)
+	if err != nil || la < -90 || la > 90 {
+		return nil, fmt.Errorf("%w: %q", errInvalidGeo, s)
+	}
+	lo, err := strconv.ParseFloat(strings.TrimSpace(lng), 64)
+	if err != nil || lo < -180 || lo > 180 {
+		return nil, fmt.Errorf("%w: %q", errInvalidGeo, s)
+	}
+
+	return &domain.LatLng{Latitude: la, Longitude: lo}, nil
 }
 
 func listCommand() *cli.Command {

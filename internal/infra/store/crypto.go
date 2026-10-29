@@ -156,6 +156,12 @@ func (s *Store) Proxy(c crypt.Crypt, name string) (string, error) {
 	return strings.TrimSpace(string(plaintext)), nil
 }
 
+// ClearProxy deletes a profile's stored proxy, leaving it direct. A profile
+// with no proxy is not an error.
+func (s *Store) ClearProxy(name string) error {
+	return s.removeSecret(name)
+}
+
 func (s *Store) removeSecret(name string) error {
 	err := os.Remove(s.secretPath(name))
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
