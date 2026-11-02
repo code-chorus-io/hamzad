@@ -8,10 +8,6 @@ import (
 	"sync"
 )
 
-// keychainService is the service name hamzad files its Keychain items under.
-// The account is the identity's absolute path, so each key has its own item.
-const keychainService = "hamzad"
-
 // ErrNotInKeychain is returned by Keychain.Get when no passphrase is stored for
 // the identity.
 var ErrNotInKeychain = errors.New("passphrase not in keychain")
