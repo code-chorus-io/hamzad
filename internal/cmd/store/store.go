@@ -51,6 +51,9 @@ func cryptFor(ctx context.Context, st *store.Store) crypt.Crypt {
 	cfg := config.From(ctx)
 	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
 	c.Prompt = crypt.TerminalPrompt(cfg.IdentityPath, cfg.Askpass)
+	if cfg.Keychain {
+		c.Prompt = crypt.SystemKeychainPrompt(cfg.IdentityPath, c.Prompt)
+	}
 
 	return c
 }

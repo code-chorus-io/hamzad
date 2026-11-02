@@ -1,6 +1,8 @@
 # hamzad configuration.
 #
-# Copy to the store directory or point at it with --config / HAMZAD_CONFIG.
+# hamzad reads config.toml from its config root (~/.config/hamzad on Linux,
+# ~/Library/Application Support/hamzad on macOS) when it exists; point
+# elsewhere with --config / HAMZAD_CONFIG.
 # Every value can also be set via environment variables with the HAMZAD_ prefix,
 # e.g. HAMZAD_CHROME_PATH, HAMZAD_STORE_DIR.
 
@@ -33,3 +35,10 @@ identity_path = ""
 # prompt as its only argument (like SSH_ASKPASS). Lets hamzad unlock the key
 # when no terminal is attached. Empty means ask on the terminal.
 askpass = ""
+
+# macOS only: read the SSH identity's passphrase from the login keychain. The
+# first time it is needed it is asked for as usual (terminal, askpass, or the
+# dashboard's dialog) and then saved, so later commands — including runs with
+# no terminal — unlock the key without asking. The item is a generic password
+# with service "hamzad" and the identity's absolute path as its account.
+keychain = false

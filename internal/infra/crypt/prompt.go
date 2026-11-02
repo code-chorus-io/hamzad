@@ -17,7 +17,8 @@ import (
 // device", which says nothing about what to do.
 var ErrNoTerminal = errors.New(
 	"passphrase needed but stdin is not a terminal; run hamzad from a terminal, " +
-		"set askpass (HAMZAD_ASKPASS) to a program that prints the passphrase, or use an unencrypted age identity")
+		"set askpass (HAMZAD_ASKPASS) to a program that prints the passphrase, " +
+		"run once from a terminal with keychain (HAMZAD_KEYCHAIN) on to save it on macOS, or use an unencrypted age identity")
 
 // passphraseAttempts is how many tries a person gets before the command fails,
 // as with ssh and sudo.

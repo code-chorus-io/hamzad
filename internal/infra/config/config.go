@@ -51,6 +51,10 @@ type Config struct {
 	// SSH_ASKPASS. It is how a run with no terminal attached — a launcher, a
 	// script, an agent — unlocks the key. Empty means ask on the terminal.
 	Askpass string `json:"askpass" koanf:"askpass"`
+	// Keychain reads the SSH identity's passphrase from the macOS login
+	// keychain, and saves it there the first time it is typed, so no command
+	// has to ask again. Ignored, with a note, on other platforms.
+	Keychain bool `json:"keychain" koanf:"keychain"`
 }
 
 // Default returns the hardcoded configuration defaults.
@@ -64,6 +68,7 @@ func Default() Config {
 		StoreDir:     "",
 		IdentityPath: defaultIdentityPath(),
 		Askpass:      "",
+		Keychain:     false,
 	}
 }
 

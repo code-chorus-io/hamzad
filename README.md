@@ -115,7 +115,7 @@ The store is a git repository. Secrets and session state are **encrypted with [a
 
 Encrypting needs only the **public** recipients, so `add`/`edit`/`push` never touch your private key. Only **decrypting** — `open`, `pull`, `show --reveal` — uses your identity (`~/.ssh/id_ed25519` by default; override with `--identity`).
 
-An SSH key with a passphrase is asked for it once per command, however many files that command decrypts, and a mistyped passphrase gets three tries. With no terminal attached — a launcher, a script, an agent — set `askpass` (`HAMZAD_ASKPASS`, `--askpass`) to a program that prints the passphrase; it is run with the prompt as its argument, like `SSH_ASKPASS`.
+An SSH key with a passphrase is asked for it once per command, however many files that command decrypts, and a mistyped passphrase gets three tries. With no terminal attached — a launcher, a script, an agent — set `askpass` (`HAMZAD_ASKPASS`, `--askpass`) to a program that prints the passphrase; it is run with the prompt as its argument, like `SSH_ASKPASS`. On macOS, set `keychain = true` (`HAMZAD_KEYCHAIN=true`, `--keychain`) to keep the passphrase in the login Keychain instead: the first command asks for it as usual and saves it, and every later command reads it from there, terminal or not. The item is a generic password with service `hamzad` and the identity's absolute path as its account; delete it in Keychain Access, or with `security delete-generic-password -s hamzad -a <path>`, to forget it. If the stored passphrase stops working, hamzad asks again and replaces it.
 
 The bundle deliberately leaves out Chrome's caches — `Cache`, `Code Cache`, `GPUCache`, the shader and Service-Worker caches. Chrome rebuilds them on next launch and none of them carries any part of the identity being shared, but they dominate a profile's size: a real signed-in profile measured 197 MB packed with them and 66 MB without. That matters because the bundle is encrypted, so it is incompressible and git cannot delta two revisions — every `profile push` commits the whole file again, against GitHub's 50 MB warning and 100 MB hard block. If a profile still outgrows the limit, put `data/*.age` behind [Git LFS](https://git-lfs.com).
 
@@ -203,7 +203,7 @@ Canvas noise is a single fixed pattern rather than a per-profile one: it hides a
 
 ## Configuration
 
-See [`configs/config.example.toml`](configs/config.example.toml). Every key is also settable via `HAMZAD_`-prefixed environment variables (e.g. `HAMZAD_STORE_DIR`).
+hamzad reads `config.toml` from its config root (`~/.config/hamzad` on Linux, `~/Library/Application Support/hamzad` on macOS) when it exists, or the file named by `--config` / `HAMZAD_CONFIG`. See [`configs/config.example.toml`](configs/config.example.toml). Every key is also settable via `HAMZAD_`-prefixed environment variables (e.g. `HAMZAD_STORE_DIR`).
 
 ## License
 

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/carlmjohnson/versioninfo"
 	"github.com/urfave/cli/v3"
@@ -80,13 +81,18 @@ func rootFlags() []cli.Flag {
 			Usage:   "program that prints the SSH key's passphrase, for runs without a terminal",
 			Sources: cli.EnvVars(config.EnvPrefix + "ASKPASS"),
 		},
+		&cli.BoolFlag{
+			Name:    "keychain",
+			Usage:   "read the SSH key's passphrase from the macOS keychain, saving it there once typed",
+			Sources: cli.EnvVars(config.EnvPrefix + "KEYCHAIN"),
+		},
 	}
 }
 
 // loadConfig layers the file and environment configuration, then lets an
 // explicitly-set flag win over both, and carries the result on the context.
 func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) {
-	cfg, err := config.Load(cmd.String("config"))
+	cfg, err := config.Load(configPath(cmd))
 	if err != nil {
 		return ctx, err
 	}
@@ -109,6 +115,9 @@ func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) 
 	if cmd.IsSet("askpass") {
 		cfg.Askpass = cmd.String("askpass")
 	}
+	if cmd.IsSet("keychain") {
+		cfg.Keychain = cmd.Bool("keychain")
+	}
 
 	// Resolve last: the store name only becomes a path once the file, the
 	// environment and the flags have all had their say.
@@ -117,4 +126,15 @@ func loadConfig(ctx context.Context, cmd *cli.Command) (context.Context, error) 
 	}
 
 	return config.With(ctx, &cfg), nil
+}
+
+// configPath is the --config file or, without one, config.toml in the config
+// root, so settings such as the store and keychain apply to a bare
+// `hamzad profile open`. A missing file is skipped by config.Load.
+func configPath(cmd *cli.Command) string {
+	if path := cmd.String("config"); path != "" {
+		return path
+	}
+
+	return filepath.Join(config.Root(), "config.toml")
 }

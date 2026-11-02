@@ -38,6 +38,9 @@ func run(ctx context.Context, _ *cli.Command) error {
 	unlock := newPassphraseBridge(cfg.IdentityPath)
 	c := crypt.New(st.RecipientsPath(), cfg.IdentityPath)
 	c.Prompt = unlock.prompt
+	if cfg.Keychain {
+		c.Prompt = crypt.SystemKeychainPrompt(cfg.IdentityPath, c.Prompt)
+	}
 
 	// Resolve once at startup so a missing or unpinned browser is reported here
 	// rather than as a failed session on every profile the user opens.
