@@ -483,8 +483,8 @@ github.com/tailscale/web-client-prebuilt v0.0.0-20260917222731-e0ed2d0d0fea h1:a
 github.com/tailscale/web-client-prebuilt v0.0.0-20260917222731-e0ed2d0d0fea/go.mod h1:agQPE6y6ldqCOui2gkIh7ZMztTkIQKH049tv8siLuNQ=
 github.com/tc-hib/winres v0.2.1 h1:YDE0FiP0VmtRaDn7+aaChp1KiF4owBiJa5l964l5ujA=
 github.com/tc-hib/winres v0.2.1/go.mod h1:C/JaNhH3KBvhNKVbvdlDWkbMDO9H4fKKDaN7/07SSuk=
-github.com/things-go/go-socks5 v0.1.3 h1:W6lC9bUiuubcVVGU5BRRrwUP6k/7HEwrJm5O+mIUHDE=
-github.com/things-go/go-socks5 v0.1.3/go.mod h1:LZ99kKdQKnpwKv9P1Ilowna9cafg3cmYB/Dr1iagwDg=
+github.com/things-go/go-socks5 v0.1.4 h1:DF0OvKL4O1pxmSh2J/suagjyGV7+hduBblpldPOuVSM=
+github.com/things-go/go-socks5 v0.1.4/go.mod h1:LZ99kKdQKnpwKv9P1Ilowna9cafg3cmYB/Dr1iagwDg=
 github.com/tidwall/gjson v1.14.2/go.mod h1:/wbyibRr2FHMks5tjHJ5F8dMZh3AcwJEMf5vlfC0lxk=
 github.com/tidwall/gjson v1.20.0 h1:+agJ3rEzKcCXKDKo0ml26UROcpcAlnZyjq+TjbY5Fto=
 github.com/tidwall/gjson v1.20.0/go.mod h1:V37/opeE/JbLUOfH0QTXiNez2l0RUjYUhpT4szFQAfc=
