@@ -17,7 +17,7 @@ require (
 	github.com/knadh/koanf/v2 v2.4.1
 	github.com/sagernet/sing v0.9.7-0.20261023115459-5dc452e537bf
 	github.com/sagernet/sing-box v1.14.4
-	github.com/things-go/go-socks5 v0.1.3
+	github.com/things-go/go-socks5 v0.1.4
 	github.com/urfave/cli/v3 v3.14.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
