@@ -8,9 +8,11 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 )
@@ -178,9 +180,27 @@ func (s *Store) HasBundle(name string) bool {
 	return err == nil
 }
 
+// CookiesEntry is the bundle member that carries a profile's cookies as
+// portable JSON, next to the user-data-dir files.
+//
+// Chrome encrypts every cookie value in its Cookies database with a key owned by
+// the operating system (the macOS Keychain, DPAPI, libsecret), so that database
+// is unreadable on any other machine and Chrome drops what it cannot decrypt.
+// The JSON is the copy that survives the move. It exists only inside the
+// encrypted bundle: PackBundleWith writes it straight into the archive and
+// UnpackBundleWith hands it back in memory, so plaintext cookies never land in
+// the working directory.
+const CookiesEntry = ".hamzad-cookies.json"
+
 // PackBundle archives the profile's working user-data directory as an encrypted
 // tar.gz bundle. Encryption needs only the recipients.
 func (s *Store) PackBundle(c crypt.Crypt, name string) error {
+	return s.PackBundleWith(c, name, nil)
+}
+
+// PackBundleWith is PackBundle with the profile's exported cookies added to the
+// archive as CookiesEntry. A nil cookies leaves the entry out.
+func (s *Store) PackBundleWith(c crypt.Crypt, name string, cookies []byte) error {
 	dir := s.UserDataDir(name)
 	if _, err := os.Stat(dir); err != nil {
 		return fmt.Errorf("no working data for %q to pack: %w", name, err)
@@ -192,7 +212,7 @@ func (s *Store) PackBundle(c crypt.Crypt, name string) error {
 	}
 	defer func() { _ = os.Remove(tmp.Name()) }()
 
-	if err := s.writeBundle(c, tmp, dir); err != nil {
+	if err := s.writeBundle(c, tmp, dir, cookies); err != nil {
 		_ = tmp.Close()
 
 		return err
@@ -208,7 +228,7 @@ func (s *Store) PackBundle(c crypt.Crypt, name string) error {
 	return nil
 }
 
-func (s *Store) writeBundle(c crypt.Crypt, dst io.Writer, dir string) error {
+func (s *Store) writeBundle(c crypt.Crypt, dst io.Writer, dir string, cookies []byte) error {
 	enc, err := c.EncryptWriter(dst)
 	if err != nil {
 		return err
@@ -218,6 +238,11 @@ func (s *Store) writeBundle(c crypt.Crypt, dst io.Writer, dir string) error {
 
 	if err := tarDir(tw, dir); err != nil {
 		return err
+	}
+	if cookies != nil {
+		if err := tarBytes(tw, CookiesEntry, cookies); err != nil {
+			return err
+		}
 	}
 
 	if err := tw.Close(); err != nil {
@@ -308,6 +333,11 @@ func tarDir(tw *tar.Writer, root string) error {
 		if relErr != nil {
 			return fmt.Errorf("relativizing %q: %w", path, relErr)
 		}
+		// A stray copy left by an older hamzad that unpacked a newer bundle; the
+		// fresh export is appended after the walk, so never carry two.
+		if rel == CookiesEntry {
+			return nil
+		}
 		if isCachePath(rel) {
 			// Returning SkipDir prunes the whole subtree rather than walking
 			// into tens of thousands of cache entries only to drop each one.
@@ -364,6 +394,26 @@ func tarEntry(tw *tar.Writer, root, path string, info os.FileInfo) error {
 	return copyFileInto(tw, path)
 }
 
+// tarBytes writes an in-memory file into tw. Owner-only permissions, since the
+// content it carries (exported cookies) is as sensitive as a password.
+func tarBytes(tw *tar.Writer, name string, data []byte) error {
+	header := &tar.Header{
+		Name:     name,
+		Mode:     0o600,
+		Size:     int64(len(data)),
+		Typeflag: tar.TypeReg,
+		ModTime:  time.Now(),
+	}
+	if err := tw.WriteHeader(header); err != nil {
+		return fmt.Errorf("writing tar header for %q: %w", name, err)
+	}
+	if _, err := tw.Write(data); err != nil {
+		return fmt.Errorf("archiving %q: %w", name, err)
+	}
+
+	return nil
+}
+
 func copyFileInto(tw *tar.Writer, path string) error {
 	f, err := os.Open(path) //nolint:gosec // path comes from filepath.Walk over our own store dir
 
@@ -381,53 +431,93 @@ func copyFileInto(tw *tar.Writer, path string) error {
 
 // UnpackBundle decrypts and extracts a profile's bundle over its working
 // user-data directory, replacing it. Decryption uses the local identity.
+// Exported cookies in the bundle are discarded; use UnpackBundleWith to get them.
 func (s *Store) UnpackBundle(c crypt.Crypt, name string) error {
+	_, err := s.UnpackBundleWith(c, name)
+
+	return err
+}
+
+// UnpackBundleWith is UnpackBundle that also returns the bundle's exported
+// cookies (CookiesEntry), or nil when the bundle predates them. The cookies are
+// returned in memory and never written to the working directory.
+func (s *Store) UnpackBundleWith(c crypt.Crypt, name string) ([]byte, error) {
 	f, err := os.Open(s.BundlePath(name))
 	if err != nil {
-		return fmt.Errorf("opening bundle: %w", err)
+		return nil, fmt.Errorf("opening bundle: %w", err)
 	}
 	defer func() { _ = f.Close() }()
 
 	dec, err := c.DecryptReader(f)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	gz, err := gzip.NewReader(dec)
 	if err != nil {
-		return fmt.Errorf("opening gzip: %w", err)
+		return nil, fmt.Errorf("opening gzip: %w", err)
 	}
 	defer func() { _ = gz.Close() }()
 
 	dir := s.UserDataDir(name)
 	if err := os.RemoveAll(dir); err != nil {
-		return fmt.Errorf("clearing working dir: %w", err)
+		return nil, fmt.Errorf("clearing working dir: %w", err)
 	}
 	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return fmt.Errorf("creating working dir: %w", err)
+		return nil, fmt.Errorf("creating working dir: %w", err)
 	}
 
 	return extractTar(tar.NewReader(gz), dir)
 }
 
-func extractTar(tr *tar.Reader, dir string) error {
+// maxCookiesEntry caps the in-memory cookies member. A heavy profile holds a few
+// thousand cookies, well under a megabyte of JSON; this is a bomb guard, not a
+// budget.
+const maxCookiesEntry = 64 << 20 // 64 MiB
+
+// extractTar extracts tr into dir and returns the CookiesEntry member, which it
+// keeps in memory instead of writing it out.
+func extractTar(tr *tar.Reader, dir string) ([]byte, error) {
+	var cookies []byte
+
 	for {
 		header, err := tr.Next()
 		if errors.Is(err, io.EOF) {
-			return nil
+			return cookies, nil
 		}
 		if err != nil {
-			return fmt.Errorf("reading tar: %w", err)
+			return nil, fmt.Errorf("reading tar: %w", err)
+		}
+
+		if header.Typeflag == tar.TypeReg && path.Clean(header.Name) == CookiesEntry {
+			if cookies, err = readCapped(tr, maxCookiesEntry); err != nil {
+				return nil, err
+			}
+
+			continue
 		}
 
 		target, err := safeJoin(dir, header.Name)
 		if err != nil {
-			return err
+			return nil, err
 		}
 
 		if err := extractEntry(tr, header, dir, target); err != nil {
-			return err
+			return nil, err
 		}
 	}
+}
+
+// readCapped reads r fully, refusing more than limit bytes.
+func readCapped(r io.Reader, limit int64) ([]byte, error) {
+	data, err := io.ReadAll(io.LimitReader(r, limit+1))
+	if err != nil {
+		return nil, fmt.Errorf("reading %q: %w", CookiesEntry, err)
+	}
+	if int64(len(data)) > limit {
+		return nil, fmt.Errorf("%w: %q exceeds %d bytes", errBundleEntryTooLarge, CookiesEntry, limit)
+	}
+
+	return data, nil
 }
 
 func extractEntry(tr *tar.Reader, header *tar.Header, dir, target string) error {

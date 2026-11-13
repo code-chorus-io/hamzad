@@ -110,7 +110,7 @@ The store is a git repository. Secrets and session state are **encrypted with [a
 | `profiles.toml` | yes, plaintext | non-secret config: fingerprint, timezone, notes |
 | `recipients.txt` | yes, plaintext | age/SSH **public** keys allowed to decrypt |
 | `secrets/<name>.age` | yes, encrypted | the profile's proxy (incl. credentials) |
-| `data/<name>.tar.age` | yes, encrypted | Chrome user-data-dir minus caches (cookies, storage, logins) |
+| `data/<name>.tar.age` | yes, encrypted | Chrome user-data-dir minus caches (cookies, storage, logins), plus the cookies as portable JSON |
 | `data/<name>/` | **gitignored** | the local, unencrypted working copy |
 
 Encrypting needs only the **public** recipients, so `add`/`edit`/`push` never touch your private key. Only **decrypting** — `open`, `pull`, `show --reveal` — uses your identity (`~/.ssh/id_ed25519` by default; override with `--identity`).
@@ -139,6 +139,23 @@ A teammate clones the repo, runs `store sync`, then `profile open work` — thei
 A session ends when Chrome exits: close its window, or on macOS **quit** it (⌘Q), since closing the last window there leaves Chrome running. Ctrl-C in the terminal works too. Either way Chrome is asked to quit, not killed, so it writes cookies and storage to disk before the bundle is packed; only a browser that has not exited after 15 seconds is killed.
 
 `open` only restores a bundle when there is **no local working copy**, since unpacking replaces the directory outright and the local copy may hold newer browsing. So after pulling a teammate's newer session for a profile you have already opened, `open` keeps yours and says so — run `profile pull <name>` to take theirs.
+
+### How cookies move between machines
+
+Copying the user-data-dir is not enough to move a login. Chrome encrypts each cookie value with a key that the operating system keeps for it: the login Keychain on macOS, libsecret or kwallet on Linux, DPAPI and app-bound encryption on Windows. That key is different on every machine. On a teammate's machine Chrome cannot decrypt the copied `Cookies` database, drops every cookie without an error, and the account opens signed out.
+
+So a save also exports the cookies. After the session ends, hamzad starts the same Chrome once more on the profile for about a second: no window, no network (its traffic goes to a dead loopback proxy), and a DevTools port that only hamzad uses. It reads every cookie in plaintext with `Storage.getCookies` and writes them into the bundle as `.hamzad-cookies.json`. That file exists only inside the encrypted bundle and is never written to the working directory. A restore unpacks the bundle, deletes the copied cookie database, and writes the cookies back through the same kind of helper with `Storage.setCookies`, so Chrome encrypts them with this machine's key. `open`, `pull`, `push` and the TUI all do this.
+
+This works across macOS, Linux and Windows, because Chrome does all the encryption itself. Your own session is still the clean launch with no DevTools port; the helper runs only before or after it. GoLogin does this differently: it ships a patched Chromium ("Orbita") that it launches with `--password-store=basic`, so the cookie key is the same on every machine and the raw `Cookies` file can move as it is. A stock Chrome cannot do that on macOS or Windows.
+
+Limits:
+
+- Only cookies are made portable. Saved passwords (`Login Data`) are encrypted the same way and do not decrypt on another machine.
+- Session cookies (no expiry) end with the browser session, as they always do, so they are not in the export.
+- Chrome caps a cookie's expiry at 400 days when it is written back.
+- A site can still ask you to sign in again when the IP or device changes, and Google can bind a session to the device (Device Bound Session Credentials), which no copy can move. Use one machine at a time: two machines on one session often sign both out when the site rotates its tokens.
+- A bundle saved by an older hamzad has no cookie export. It still restores in full on the machine that saved it.
+- If the export fails (for example, no browser is found), the save continues without it and prints a warning.
 
 ### Adding a recipient after the fact
 

@@ -22,6 +22,7 @@ import (
 	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 	"github.com/code-chorus-io/hamzad/internal/infra/geo"
 	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
+	bundle "github.com/code-chorus-io/hamzad/internal/infra/session"
 	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
 
@@ -211,7 +212,7 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 	m.mu.Unlock()
 	m.emit(name)
 
-	keptLocal, err := m.restore(name, o.NoRestore)
+	keptLocal, cookieNote, err := m.restore(ctx, name, o.NoRestore)
 	if err != nil {
 		m.fail(name, err)
 
@@ -233,7 +234,7 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 	s.cancel = cancel
 	s.status = StatusRunning
 	s.debugPort = o.DebugPort
-	s.note = launchNotes(keptLocal, o.DebugPort, opts)
+	s.note = launchNotes(keptLocal, cookieNote, o.DebugPort, opts)
 	m.mu.Unlock()
 	m.emit(name)
 
@@ -268,11 +269,14 @@ func (m *Manager) Open(ctx context.Context, name string, o OpenOpts) error {
 // overrides a no-CDP launch cannot apply. The latter matters most here, since
 // the TUI's operating-system preset pairs a platform with a user-agent and a
 // clean launch applies only the user-agent.
-func launchNotes(keptLocal bool, debugPort int, opts chrome.Options) string {
+func launchNotes(keptLocal bool, cookieNote string, debugPort int, opts chrome.Options) string {
 	var notes []string
 
 	if keptLocal {
 		notes = append(notes, "kept local session, shared bundle not restored")
+	}
+	if cookieNote != "" {
+		notes = append(notes, cookieNote)
 	}
 	if debugPort == 0 {
 		if dropped := chrome.CleanModeDropped(opts); dropped != "" {
@@ -333,20 +337,25 @@ func (m *Manager) fail(name string, err error) {
 // bundle exists and no working copy is present yet, mirroring `profile open`'s
 // restoreSession. It reports whether a bundle was deliberately left unrestored
 // because local data won, so the caller can say so rather than let it pass
-// unnoticed.
-func (m *Manager) restore(name string, disabled bool) (bool, error) {
+// unnoticed. A failed cookie import is not fatal — the profile still opens,
+// signed out — so it comes back as a note for the session, not an error.
+func (m *Manager) restore(ctx context.Context, name string, disabled bool) (bool, string, error) {
 	if disabled || !m.store.HasBundle(name) {
-		return false, nil
+		return false, "", nil
 	}
 	if dirExists(m.store.UserDataDir(name)) {
-		return true, nil
+		return true, "", nil
 	}
 
-	if err := m.store.UnpackBundle(m.crypt, name); err != nil {
-		return false, fmt.Errorf("restoring session for %q: %w", name, err)
+	res, err := bundle.Restore(ctx, m.store, m.crypt, m.execPath, name)
+	if err != nil {
+		return false, "", fmt.Errorf("restoring session for %q: %w", name, err)
+	}
+	if res.CookieErr != nil {
+		return false, "cookies not restored, may be signed out: " + res.CookieErr.Error(), nil //nolint:nilerr // a failed cookie import is a warning on the session, not a failed launch
 	}
 
-	return false, nil
+	return false, "", nil
 }
 
 // save re-encrypts the working data into the shared bundle when encryption is
@@ -356,7 +365,7 @@ func (m *Manager) save(name string) {
 	if !m.crypt.Configured() {
 		return
 	}
-	_ = m.store.PackBundle(m.crypt, name)
+	_, _ = bundle.Save(context.Background(), m.store, m.crypt, m.execPath, name)
 }
 
 // buildOptions resolves a profile into chrome launch options, decrypting its

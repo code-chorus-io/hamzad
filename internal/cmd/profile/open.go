@@ -19,8 +19,22 @@ import (
 	"github.com/code-chorus-io/hamzad/internal/infra/crypt"
 	"github.com/code-chorus-io/hamzad/internal/infra/geo"
 	"github.com/code-chorus-io/hamzad/internal/infra/proxy"
+	"github.com/code-chorus-io/hamzad/internal/infra/session"
 	"github.com/code-chorus-io/hamzad/internal/infra/store"
 )
+
+// browserPath resolves the configured browser for a cookie export or import,
+// or "" when none is available — session.Save and Restore then skip the cookie
+// step and say so, rather than fail a pull or push over it.
+func browserPath(ctx context.Context) string {
+	cfg := config.From(ctx)
+	path, err := chrome.Resolve(cfg.ChromePath, cfg.ChromeVersion)
+	if err != nil {
+		return ""
+	}
+
+	return path
+}
 
 func openCommand() *cli.Command {
 	return &cli.Command{
@@ -54,7 +68,7 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	if err := restoreSession(st, c, name, cmd.Bool("no-restore")); err != nil {
+	if err := restoreSession(ctx, st, c, opts.ExecPath, name, cmd.Bool("no-restore")); err != nil {
 		return err
 	}
 
@@ -75,7 +89,7 @@ func openAction(ctx context.Context, cmd *cli.Command) error {
 		return err
 	}
 
-	saved, err := saveSession(cmd, st, c, name)
+	saved, err := saveSession(ctx, cmd, st, c, opts.ExecPath, name)
 	if err != nil || !saved || !cmd.Bool("sync") {
 		return err
 	}
@@ -112,7 +126,7 @@ func syncSession(ctx context.Context, st *store.Store, name string) error {
 
 // restoreSession decrypts the shared bundle over the working directory, unless
 // disabled, absent, or outvoted by a local working copy.
-func restoreSession(st *store.Store, c crypt.Crypt, name string, disabled bool) error {
+func restoreSession(ctx context.Context, st *store.Store, c crypt.Crypt, execPath, name string, disabled bool) error {
 	if disabled || !st.HasBundle(name) {
 		return nil
 	}
@@ -129,22 +143,56 @@ func restoreSession(st *store.Store, c crypt.Crypt, name string, disabled bool) 
 	}
 
 	fmt.Printf("restoring encrypted session for %q…\n", name)
+	res, err := session.Restore(ctx, st, c, execPath, name)
+	if err != nil {
+		return err
+	}
+	reportRestore(res)
 
-	return st.UnpackBundle(c, name)
+	return nil
+}
+
+// reportRestore says how the cookie import went after a bundle was unpacked.
+func reportRestore(res session.Result) {
+	if res.CookieErr != nil {
+		fmt.Printf("warning: cookies not restored, so the profile may be signed out: %v\n", res.CookieErr)
+
+		return
+	}
+	if res.Cookies > 0 || res.Refused > 0 {
+		fmt.Printf("restored %d cookies", res.Cookies)
+		if res.Refused > 0 {
+			fmt.Printf(" (%d refused by the browser)", res.Refused)
+		}
+		fmt.Println()
+	}
+}
+
+// reportSave says how the cookie export went before a bundle was packed.
+func reportSave(res session.Result) {
+	if res.CookieErr != nil {
+		fmt.Printf("warning: cookies not exported — the session restores signed in on this machine only: %v\n",
+			res.CookieErr)
+
+		return
+	}
+	fmt.Printf("exported %d cookies\n", res.Cookies)
 }
 
 // saveSession re-encrypts the working data into the shared bundle after a
 // session ends, unless disabled or encryption is not configured. It reports
 // whether a bundle was written.
-func saveSession(cmd *cli.Command, st *store.Store, c crypt.Crypt, name string) (bool, error) {
+func saveSession(ctx context.Context, cmd *cli.Command, st *store.Store, c crypt.Crypt, execPath, name string) (bool, error) {
 	if cmd.Bool("no-save") || !c.Configured() {
 		return false, nil
 	}
 
 	fmt.Printf("saving encrypted session for %q…\n", name)
-	if err := st.PackBundle(c, name); err != nil {
+	res, err := session.Save(ctx, st, c, execPath, name)
+	if err != nil {
 		return false, err
 	}
+	reportSave(res)
 
 	if cmd.Bool("sync") {
 		fmt.Println("session saved")
@@ -330,9 +378,11 @@ func pullCommand() *cli.Command {
 				return fmt.Errorf("%w for %q — run 'store sync' to fetch it first", errNoBundle, name)
 			}
 
-			if err := st.UnpackBundle(cryptFor(ctx, st), name); err != nil {
+			res, err := session.Restore(ctx, st, cryptFor(ctx, st), browserPath(ctx), name)
+			if err != nil {
 				return err
 			}
+			reportRestore(res)
 
 			fmt.Printf("restored session for %q\n", name)
 
@@ -358,9 +408,11 @@ func pushCommand() *cli.Command {
 				return errEncNotConfigured
 			}
 
-			if err := st.PackBundle(c, name); err != nil {
+			res, err := session.Save(ctx, st, c, browserPath(ctx), name)
+			if err != nil {
 				return err
 			}
+			reportSave(res)
 
 			fmt.Printf("packed encrypted session for %q — run 'store sync' to share\n", name)
 
