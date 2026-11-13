@@ -12,6 +12,8 @@ import (
 
 	browsercmd "github.com/code-chorus-io/hamzad/internal/cmd/browser"
 	profilecmd "github.com/code-chorus-io/hamzad/internal/cmd/profile"
+	proxycmd "github.com/code-chorus-io/hamzad/internal/cmd/proxy"
+	servecmd "github.com/code-chorus-io/hamzad/internal/cmd/serve"
 	storecmd "github.com/code-chorus-io/hamzad/internal/cmd/store"
 	tuicmd "github.com/code-chorus-io/hamzad/internal/cmd/tui"
 	"github.com/code-chorus-io/hamzad/internal/infra/config"
@@ -29,6 +31,8 @@ func Execute() {
 		Commands: []*cli.Command{
 			profilecmd.Command(),
 			browsercmd.Command(),
+			proxycmd.Command(),
+			servecmd.Command(),
 			storecmd.Command(),
 			tuicmd.Command(),
 		},

@@ -608,3 +608,38 @@ func (s *Store) removeBundle(name string) error {
 
 	return nil
 }
+
+// BundleCookies returns the exported cookies (CookiesEntry) carried by a
+// profile's bundle without extracting anything, or nil when the bundle
+// predates cookie export. Decryption uses the local identity.
+func (s *Store) BundleCookies(c crypt.Crypt, name string) ([]byte, error) {
+	f, err := os.Open(s.BundlePath(name))
+	if err != nil {
+		return nil, fmt.Errorf("opening bundle: %w", err)
+	}
+	defer func() { _ = f.Close() }()
+
+	dec, err := c.DecryptReader(f)
+	if err != nil {
+		return nil, err
+	}
+	gz, err := gzip.NewReader(dec)
+	if err != nil {
+		return nil, fmt.Errorf("opening gzip: %w", err)
+	}
+	defer func() { _ = gz.Close() }()
+
+	tr := tar.NewReader(gz)
+	for {
+		header, err := tr.Next()
+		if errors.Is(err, io.EOF) {
+			return nil, nil
+		}
+		if err != nil {
+			return nil, fmt.Errorf("reading tar: %w", err)
+		}
+		if header.Typeflag == tar.TypeReg && path.Clean(header.Name) == CookiesEntry {
+			return readCapped(tr, maxCookiesEntry)
+		}
+	}
+}

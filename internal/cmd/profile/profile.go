@@ -55,6 +55,7 @@ func Command() *cli.Command {
 			showCommand(),
 			openCommand(),
 			geoCommand(),
+			cookiesCommand(),
 			pullCommand(),
 			pushCommand(),
 			removeCommand(),

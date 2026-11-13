@@ -83,6 +83,25 @@ Share links are parsed for `socks5`/`socks4`/`http`/`https`, `vless`, `trojan` a
 
 Whatever the protocol, Chrome only ever sees an unauthenticated HTTP proxy on loopback. Chrome cannot authenticate a proxy from the command line and cannot speak SOCKS auth at all, so sing-box runs the real handshake behind that listener. A share link's `fp=chrome` is honoured: the TLS ClientHello is made to look like Chrome's, which matters as much as the address does.
 
+### Checking a proxy
+
+`proxy check` tests proxies without opening a browser. It goes through the same sing-box relay that Chrome would use, so it speaks every protocol a profile can.
+
+```sh
+hamzad proxy check                 # every profile that has a proxy
+hamzad proxy check work home       # only these
+hamzad proxy check --spec 'vless://…'   # a link, before you add it
+hamzad proxy check --json
+```
+
+For each proxy it shows the exit IP, the country and the timezone, and two latencies. `CONNECT` is the first request: proxy handshake, TLS and one round trip, which is what a fresh page load pays. `RTT` is the median of three more requests on the open connection. The status is `ok`, `FAIL`, or `mismatch` when the profile disagrees with its exit in a way a site can see:
+
+- its timezone has a different UTC offset than the exit IP (two zones with the same offset, like Berlin and Paris, are not a mismatch),
+- it pins no timezone, so the browser shows this machine's,
+- its pinned geolocation is more than 500 km from the exit IP's location.
+
+`profile geo` fixes the first two. The command exits non-zero if any proxy fails, so you can use it in a script or a cron job. The exit location comes from ipwho.is, asked through the proxy over HTTPS, the same as `profile geo`.
+
 ## Named stores
 
 Profiles live in a **store**, and you can have several. Each is its own git repository with its own profiles, recipients and session bundles, so a work set shared with colleagues never mixes with a personal one.
@@ -157,6 +176,23 @@ Limits:
 - A bundle saved by an older hamzad has no cookie export. It still restores in full on the machine that saved it.
 - If the export fails (for example, no browser is found), the save continues without it and prints a warning.
 
+### Importing and exporting cookies
+
+`profile cookies` moves cookies between a profile and other tools.
+
+```sh
+hamzad profile cookies import work cookies.json          # add to the profile's cookies
+hamzad profile cookies import work cookies.txt --replace # replace them
+curl … | hamzad profile cookies import work -            # from standard input
+hamzad profile cookies export work -f cdp -o state.json  # json | cdp | netscape
+```
+
+`import` detects the format: Cookie-Editor, EditThisCookie or GoLogin JSON; Puppeteer or Playwright JSON (including a Playwright `storageState` file); hamzad's own bundle export; or Netscape `cookies.txt` from curl, wget or yt-dlp. `export` writes `json` (the Cookie-Editor format, which most cookie tools import), `cdp` (for Puppeteer `page.setCookie` and Playwright `addCookies`) or `netscape`.
+
+Both go through the profile's browser, the same way as a session save, so the profile must not be open while you run them. When a profile has no local copy yet, `export` reads the cookies from the shared bundle with no browser, and `import` restores the bundle first, so the shared session is not lost. After an import, run `profile push` to share the result.
+
+An exported file contains live logins in plaintext. `-o` writes it with owner-only permissions; delete it when you are done.
+
 ### Adding a recipient after the fact
 
 age fixes the recipient set at the moment a file is written, so a key added later cannot read anything already stored. A new teammate sees `profiles.toml` and `recipients.txt` — both plaintext — but every `profile open` fails at the decrypt. Adding the key is only half the job:
@@ -176,6 +212,42 @@ Every bundle it rewrites is committed whole on the next sync, since age output i
 ## Automation attach
 
 `profile open --cdp-port <port>` fixes Chrome's remote-debugging port and prints the `webSocketDebuggerUrl`. Point Puppeteer (`connect`), Playwright (`connectOverCDP`), or Selenium (`debuggerAddress`) at it to automate the profile.
+
+### Local API
+
+`hamzad serve` runs a small HTTP API that starts and stops profiles and returns their DevTools endpoints, so a script can drive many profiles without a terminal for each. It does for hamzad what GoLogin's local API does for its SDKs.
+
+```sh
+hamzad serve                       # prints the address and a random token
+HAMZAD_SERVE_TOKEN=… hamzad serve  # or a fixed token (also --token)
+```
+
+| Request | Does |
+| --- | --- |
+| `GET /v1/profiles` | every profile, with its session if it has one |
+| `GET /v1/profiles/{name}` | one profile |
+| `POST /v1/profiles/{name}/start` | launch it; answers when DevTools is up, with `ws_endpoint`, `http_endpoint` and `cdp_port` |
+| `POST /v1/profiles/{name}/stop` | quit it; answers once the session is saved |
+| `GET /v1/sessions` | every session this server has run |
+
+The `start` body is optional: `{"start_url": "…", "auto_geo": true, "no_restore": true, "no_save": true, "cdp_port": 9222}`, the same as the `profile open` flags. Without `cdp_port` a free port is chosen. Starting a profile that is already running answers `409` with the running session, so you can reuse its endpoint.
+
+```js
+const res = await fetch("http://127.0.0.1:36912/v1/profiles/work/start", {
+  method: "POST",
+  headers: { Authorization: `Bearer ${process.env.HAMZAD_SERVE_TOKEN}` },
+});
+const { ws_endpoint } = await res.json();
+const browser = await puppeteer.connect({ browserWSEndpoint: ws_endpoint });
+// Playwright: await chromium.connectOverCDP(ws_endpoint)
+```
+
+Things to know:
+
+- A session started through the API always has a DevTools port, so it has the CDP overrides and also the automation tells described above. The clean launch is for `profile open`.
+- Sessions are restored and saved like any other, including the cookie export. Stopping the server (Ctrl-C) stops and saves every browser that it started.
+- The API controls signed-in browsers, so it is locked down. It listens on loopback only and refuses any other address. Every request needs `Authorization: Bearer <token>`. It refuses a request whose `Host` header is not a loopback address, which blocks a web page that uses DNS rebinding to reach the port.
+- Profile responses say whether a proxy is set, never what it is.
 
 ## What is spoofed, and how reliable it is
 

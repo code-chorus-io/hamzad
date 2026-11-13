@@ -269,3 +269,9 @@ func probeEndpoint(ctx context.Context, client *http.Client, endpoint string) st
 
 	return body.WebSocketDebuggerURL
 }
+
+// WaitForEndpoint waits until a browser started with --remote-debugging-port
+// publishes its browser websocket URL, and returns it.
+func WaitForEndpoint(ctx context.Context, port int) (string, error) {
+	return waitForEndpoint(ctx, port)
+}

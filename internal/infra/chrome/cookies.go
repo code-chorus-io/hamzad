@@ -79,47 +79,95 @@ type cookiesDoc struct {
 // helper browser and returns them as a JSON document for ImportCookies, along
 // with how many there were. The profile must not be open in another browser.
 func ExportCookies(ctx context.Context, execPath, userDataDir string) ([]byte, int, error) {
+	raw, product, err := readCookies(ctx, execPath, userDataDir)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	// The browser's entries are kept verbatim, so a field a later Chrome adds
+	// survives the trip even before this code knows about it.
+	out, err := json.Marshal(cookiesDoc{Format: cookiesFormat, Browser: product, Cookies: raw})
+	if err != nil {
+		return nil, 0, fmt.Errorf("encoding cookies: %w", err)
+	}
+
+	return out, len(raw), nil
+}
+
+// ReadCookies reads every cookie of the profile in userDataDir through a helper
+// browser. The profile must not be open in another browser.
+func ReadCookies(ctx context.Context, execPath, userDataDir string) ([]Cookie, error) {
+	raw, _, err := readCookies(ctx, execPath, userDataDir)
+	if err != nil {
+		return nil, err
+	}
+
+	return decodeEntries(raw)
+}
+
+// DecodeCookies parses an ExportCookies document.
+func DecodeCookies(data []byte) ([]Cookie, error) {
+	var doc cookiesDoc
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil, fmt.Errorf("decoding cookies export: %w", err)
+	}
+	if doc.Format != cookiesFormat {
+		return nil, fmt.Errorf("%w: %d", errCookiesFormat, doc.Format)
+	}
+
+	return decodeEntries(doc.Cookies)
+}
+
+func decodeEntries(raw []json.RawMessage) ([]Cookie, error) {
+	out := make([]Cookie, 0, len(raw))
+	for _, r := range raw {
+		var c Cookie
+		if err := json.Unmarshal(r, &c); err != nil {
+			return nil, fmt.Errorf("decoding cookie: %w", err)
+		}
+		out = append(out, c)
+	}
+
+	return out, nil
+}
+
+// readCookies returns the browser's Storage.getCookies entries verbatim, and
+// its product string.
+func readCookies(ctx context.Context, execPath, userDataDir string) ([]json.RawMessage, string, error) {
 	ctx, cancel := context.WithTimeout(ctx, helperTimeout)
 	defer cancel()
 
 	h, err := startHelper(ctx, execPath, userDataDir)
 	if err != nil {
-		return nil, 0, err
+		return nil, "", err
 	}
 	defer h.close(ctx)
 
-	doc := cookiesDoc{Format: cookiesFormat}
-
+	var product string
 	if raw, err := h.client.Send(ctx, "Browser.getVersion", nil); err == nil {
 		var v struct {
 			Product string `json:"product"`
 		}
 		if json.Unmarshal(raw, &v) == nil {
-			doc.Browser = v.Product
+			product = v.Product
 		}
 	}
 
 	raw, err := h.client.Send(ctx, "Storage.getCookies", nil)
 	if err != nil {
-		return nil, 0, err
+		return nil, "", err
 	}
 	var got struct {
 		Cookies []json.RawMessage `json:"cookies"`
 	}
 	if err := json.Unmarshal(raw, &got); err != nil {
-		return nil, 0, fmt.Errorf("decoding cookies: %w", err)
+		return nil, "", fmt.Errorf("decoding cookies: %w", err)
 	}
-	doc.Cookies = got.Cookies
-	if doc.Cookies == nil {
-		doc.Cookies = []json.RawMessage{}
-	}
-
-	out, err := json.Marshal(doc)
-	if err != nil {
-		return nil, 0, fmt.Errorf("encoding cookies: %w", err)
+	if got.Cookies == nil {
+		got.Cookies = []json.RawMessage{}
 	}
 
-	return out, len(doc.Cookies), nil
+	return got.Cookies, product, nil
 }
 
 // ImportCookies replaces the cookie store of the profile in userDataDir with the
@@ -131,25 +179,29 @@ func ExportCookies(ctx context.Context, execPath, userDataDir string) ([]byte, i
 // another machine is encrypted under a key this one does not have, and the
 // export is the authoritative copy of it.
 func ImportCookies(ctx context.Context, execPath, userDataDir string, data []byte) (int, int, error) {
-	var doc cookiesDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return 0, 0, fmt.Errorf("decoding cookies export: %w", err)
-	}
-	if doc.Format != cookiesFormat {
-		return 0, 0, fmt.Errorf("%w: %d", errCookiesFormat, doc.Format)
+	cookies, err := DecodeCookies(data)
+	if err != nil {
+		return 0, 0, err
 	}
 
-	params := make([]map[string]any, 0, len(doc.Cookies))
-	for _, raw := range doc.Cookies {
-		var c exportedCookie
-		if err := json.Unmarshal(raw, &c); err != nil {
-			return 0, 0, fmt.Errorf("decoding cookie: %w", err)
-		}
+	return WriteCookies(ctx, execPath, userDataDir, cookies, true)
+}
+
+// WriteCookies writes cookies into the profile in userDataDir through a helper
+// browser, which encrypts them with this machine's key. With replace, the
+// profile's cookie store is deleted first; without it, the cookies are added,
+// overwriting any with the same name, domain and path. It returns how many
+// cookies were written and how many the browser refused.
+func WriteCookies(ctx context.Context, execPath, userDataDir string, cookies []Cookie, replace bool) (int, int, error) {
+	params := make([]map[string]any, 0, len(cookies))
+	for _, c := range cookies {
 		params = append(params, c.param())
 	}
 
-	if err := removeCookieStores(userDataDir); err != nil {
-		return 0, 0, err
+	if replace {
+		if err := removeCookieStores(userDataDir); err != nil {
+			return 0, 0, err
+		}
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, helperTimeout)
@@ -193,9 +245,13 @@ func setCookies(ctx context.Context, client *cdp.Client, params []map[string]any
 	return written, refused, nil
 }
 
-// exportedCookie is the part of a DevTools Network.Cookie that setCookies takes
-// back. Output-only fields (size, session's twin flags, sameParty) are dropped.
-type exportedCookie struct {
+// Cookie is the part of a DevTools Network.Cookie that setCookies takes back.
+// Output-only fields (size, sameParty) are dropped.
+//
+// It follows the DevTools conventions: a Domain with a leading dot is a domain
+// cookie, one without is host-only; Expires is in Unix seconds, ignored when
+// Session is set; SameSite is "Strict", "Lax", "None" or empty for unspecified.
+type Cookie struct {
 	Name         string          `json:"name"`
 	Value        string          `json:"value"`
 	Domain       string          `json:"domain"`
@@ -217,7 +273,7 @@ type exportedCookie struct {
 // bare domain, and setCookies given that domain would create a domain cookie
 // (".example.com") that also reaches every subdomain — a different cookie from
 // the one that was exported.
-func (c exportedCookie) param() map[string]any {
+func (c Cookie) param() map[string]any {
 	p := map[string]any{
 		keyName:    c.Name,
 		"value":    c.Value,
@@ -244,7 +300,7 @@ func (c exportedCookie) param() map[string]any {
 // addOptional copies the attributes setCookies takes as optional into p, only
 // when the export carried them: an empty sameSite or a zero port would not mean
 // "default" to the browser, it would be refused or taken literally.
-func (c exportedCookie) addOptional(p map[string]any) {
+func (c Cookie) addOptional(p map[string]any) {
 	if !c.Session && c.Expires > 0 {
 		p["expires"] = c.Expires
 	}

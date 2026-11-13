@@ -10,7 +10,7 @@ import (
 func TestCookieParamHostOnlyUsesURL(t *testing.T) {
 	t.Parallel()
 
-	p := exportedCookie{
+	p := Cookie{
 		Name: "sid", Value: "v", Domain: "accounts.example.com", Path: "/a",
 		Secure: true, Expires: 2e9, SameSite: "Lax", PartitionKey: json.RawMessage("null"),
 	}.param()
@@ -32,7 +32,7 @@ func TestCookieParamHostOnlyUsesURL(t *testing.T) {
 func TestCookieParamDomainCookie(t *testing.T) {
 	t.Parallel()
 
-	p := exportedCookie{
+	p := Cookie{
 		Name: "pref", Value: "v", Domain: ".example.com", Path: "/",
 		Session: true, Expires: -1, PartitionKey: json.RawMessage(`{"topLevelSite":"https://a.com"}`),
 	}.param()
@@ -54,7 +54,7 @@ func TestCookieParamDomainCookie(t *testing.T) {
 func TestCookieParamInsecureScheme(t *testing.T) {
 	t.Parallel()
 
-	p := exportedCookie{Name: "a", Domain: "example.org", Path: "/"}.param()
+	p := Cookie{Name: "a", Domain: "example.org", Path: "/"}.param()
 	if p["url"] != "http://example.org/" {
 		t.Fatalf("url = %v", p["url"])
 	}

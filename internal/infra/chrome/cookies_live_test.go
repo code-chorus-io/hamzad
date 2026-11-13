@@ -29,7 +29,7 @@ func TestCookiesRoundTripLive(t *testing.T) {
 	}
 
 	expires := float64(time.Now().Add(30 * 24 * time.Hour).Unix())
-	in := []exportedCookie{
+	in := []Cookie{
 		{Name: "sid", Value: "host-only-secret", Domain: "accounts.example.com", Path: "/",
 			Expires: expires, Secure: true, HTTPOnly: true, SameSite: "Lax", SourceScheme: "Secure", SourcePort: 443},
 		{Name: "pref", Value: "domain-wide", Domain: ".example.com", Path: "/",
@@ -94,7 +94,7 @@ func TestCookiesRoundTripLive(t *testing.T) {
 		want = append(want, key{c.Name, c.Domain, c.Path, c.Value})
 	}
 	for _, raw := range got.Cookies {
-		var c exportedCookie
+		var c Cookie
 		_ = json.Unmarshal(raw, &c)
 		have = append(have, key{c.Name, c.Domain, c.Path, c.Value})
 	}
