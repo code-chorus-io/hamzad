@@ -5,7 +5,7 @@ go 1.26.9
 require (
 	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.1
-	charm.land/lipgloss/v2 v2.1.0
+	charm.land/lipgloss/v2 v2.1.1
 	filippo.io/age v1.3.2
 	github.com/BurntSushi/toml v1.6.0
 	github.com/carlmjohnson/versioninfo v0.22.5
