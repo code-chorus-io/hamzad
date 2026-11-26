@@ -3,7 +3,7 @@ module github.com/code-chorus-io/hamzad
 go 1.26.9
 
 require (
-	charm.land/bubbles/v2 v2.2.1
+	charm.land/bubbles/v2 v2.2.2
 	charm.land/bubbletea/v2 v2.1.1
 	charm.land/lipgloss/v2 v2.1.0
 	filippo.io/age v1.3.2
@@ -128,7 +128,7 @@ require (
 	github.com/pires/go-proxyproto v0.16.0 // indirect
 	github.com/pkg/sftp v1.13.12 // indirect
 	github.com/quic-go/qpack v0.6.0 // indirect
-	github.com/rivo/uniseg v0.4.7 // indirect
+	github.com/rivo/uniseg v0.4.8-0.20261110175422-3a370411ca06 // indirect
 	github.com/safchain/ethtool v0.7.0 // indirect
 	github.com/sagernet/bbolt v0.0.0-20260915102804-500ee1e84832 // indirect
 	github.com/sagernet/cors v1.2.1 // indirect
